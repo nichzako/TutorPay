@@ -58,6 +58,7 @@ class Course(db.Model):
     is_completed = db.Column(db.Boolean, default=False)
     payment_method = db.Column(db.String(50), default='โอนธนาคาร')
     transfer_ref = db.Column(db.String(100), default='')
+    payment_date = db.Column(db.Date, nullable=True)   # วันที่รับเงิน (กำหนดเองได้)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # relationships

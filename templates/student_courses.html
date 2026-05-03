@@ -95,6 +95,10 @@
           <input type="number" name="price_per_course" class="form-control" min="0" step="100" placeholder="5000" required>
         </div>
       </div>
+      <div class="form-group">
+        <label>📅 วันที่รับเงิน *</label>
+        <input type="date" name="payment_date" id="coursePaymentDate" class="form-control" required>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="closeModal('addCourseModal')">ยกเลิก</button>
         <button type="submit" class="btn btn-primary">💾 บันทึก</button>
@@ -107,7 +111,16 @@
 
 {% block scripts %}
 <script>
-function openModal(id) { document.getElementById(id).classList.add('active'); }
+function openModal(id) {
+  document.getElementById(id).classList.add('active');
+  // Default วันที่รับเงินเป็นวันนี้เมื่อเปิด modal
+  if (id === 'addCourseModal') {
+    const dateInput = document.getElementById('coursePaymentDate');
+    if (dateInput && !dateInput.value) {
+      dateInput.value = new Date().toISOString().split('T')[0];
+    }
+  }
+}
 function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });

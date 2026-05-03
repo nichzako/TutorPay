@@ -90,6 +90,11 @@ with app.app_context():
             "ALTER TABLE courses ADD COLUMN transfer_ref VARCHAR(100) DEFAULT ''"
         ))
         db.session.commit()
+    if 'payment_date' not in course_cols_all:
+        db.session.execute(sqlalchemy.text(
+            "ALTER TABLE courses ADD COLUMN payment_date DATE"
+        ))
+        db.session.commit()
 
 
 # ============================================================
@@ -279,9 +284,9 @@ def dashboard():
 
     courses = Course.query.filter(
         Course.student_id.in_(sid_list),
-        db.func.date(Course.created_at) >= date_from,
-        db.func.date(Course.created_at) <= date_to,
-    ).order_by(Course.created_at.desc()).all()
+        Course.payment_date >= date_from,
+        Course.payment_date <= date_to,
+    ).order_by(Course.payment_date.desc()).all()
 
     expenses = Expense.query.filter(
         Expense.user_id == current_user.id,
@@ -332,8 +337,8 @@ def students_page():
     ).all()
     filtered_courses = Course.query.filter(
         Course.student_id.in_(sid_list),
-        db.func.date(Course.created_at) >= date_from,
-        db.func.date(Course.created_at) <= date_to,
+        Course.payment_date >= date_from,
+        Course.payment_date <= date_to,
     ).all()
 
     student_income_map = {}
@@ -409,10 +414,17 @@ def add_course(student_id):
     price_per_course = request.form.get('price_per_course', type=float)
     payment_method = request.form.get('payment_method', 'โอนธนาคาร').strip()
     transfer_ref = request.form.get('transfer_ref', '').strip()
+    payment_date_str = request.form.get('payment_date', '').strip()
 
     if not course_name or not total_sessions or price_per_course is None:
         flash('กรุณากรอกข้อมูลให้ครบ', 'error')
         return redirect(url_for('student_courses', student_id=student_id))
+
+    # Parse payment_date — fallback to today
+    try:
+        payment_date = datetime.strptime(payment_date_str, '%Y-%m-%d').date() if payment_date_str else date.today()
+    except ValueError:
+        payment_date = date.today()
 
     course = Course(
         student_id=student_id,
@@ -421,6 +433,7 @@ def add_course(student_id):
         price_per_course=price_per_course,
         payment_method=payment_method,
         transfer_ref=transfer_ref,
+        payment_date=payment_date,
     )
     db.session.add(course)
     db.session.commit()
@@ -564,9 +577,9 @@ def income_page():
 
     courses = Course.query.filter(
         Course.student_id.in_(sid_list),
-        db.func.date(Course.created_at) >= date_from,
-        db.func.date(Course.created_at) <= date_to,
-    ).order_by(Course.created_at.desc()).all()
+        Course.payment_date >= date_from,
+        Course.payment_date <= date_to,
+    ).order_by(Course.payment_date.desc()).all()
 
     hourly_income = sum(h.hours * h.rate_per_hour for h in hourly_lessons)
     course_income = sum(c.price_per_course for c in courses)
@@ -727,12 +740,12 @@ def reports_page():
     # --- Query courses ---
     course_query = Course.query.filter(
         Course.student_id.in_(sid_list),
-        db.func.date(Course.created_at) >= date_from,
-        db.func.date(Course.created_at) <= date_to,
+        Course.payment_date >= date_from,
+        Course.payment_date <= date_to,
     )
     if student_id:
         course_query = course_query.filter_by(student_id=student_id)
-    filtered_courses = course_query.order_by(Course.created_at.desc()).all()
+    filtered_courses = course_query.order_by(Course.payment_date.desc()).all()
 
     # --- Query expenses ---
     expense_query = Expense.query.filter(
@@ -761,7 +774,7 @@ def reports_page():
         })
     for c in filtered_courses:
         transactions.append({
-            'date': c.created_at.date() if c.created_at else date_from,
+            'date': c.payment_date or date_from,
             'type': 'income',
             'category': 'คอร์ส',
             'description': f'{c.student.name} — {c.course_name}',
@@ -820,8 +833,8 @@ def tax_summary_page():
 
     courses = Course.query.filter(
         Course.student_id.in_(sid_list),
-        db.func.date(Course.created_at) >= date_from,
-        db.func.date(Course.created_at) <= date_to,
+        Course.payment_date >= date_from,
+        Course.payment_date <= date_to,
     ).all()
 
     hourly_total = sum(h.total_amount for h in hourly_lessons)
@@ -842,7 +855,7 @@ def tax_summary_page():
     for h in hourly_lessons:
         monthly_income[h.date.month] += h.total_amount
     for c in courses:
-        m = c.created_at.month if c.created_at else 1
+        m = c.payment_date.month if c.payment_date else 1
         monthly_income[m] += c.price_per_course
 
     # Tax calculation — Section 40(8) flat 60% expense deduction
@@ -897,9 +910,9 @@ def export_income_csv():
 
     courses = Course.query.filter(
         Course.student_id.in_(sid_list),
-        db.func.date(Course.created_at) >= date_from,
-        db.func.date(Course.created_at) <= date_to,
-    ).order_by(Course.created_at).all()
+        Course.payment_date >= date_from,
+        Course.payment_date <= date_to,
+    ).order_by(Course.payment_date).all()
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -917,7 +930,7 @@ def export_income_csv():
         ])
     for c in courses:
         writer.writerow([
-            c.created_at.strftime('%d/%m/%Y') if c.created_at else '',
+            c.payment_date.strftime('%d/%m/%Y') if c.payment_date else '',
             'คอร์ส', c.student.name, c.course_name,
             '', '', c.payment_method or 'โอนธนาคาร', c.transfer_ref or '',
             c.price_per_course,
