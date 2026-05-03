@@ -95,6 +95,11 @@ with app.app_context():
             "ALTER TABLE courses ADD COLUMN payment_date DATE"
         ))
         db.session.commit()
+        # Backfill old records to use created_at date
+        db.session.execute(sqlalchemy.text(
+            "UPDATE courses SET payment_date = date(created_at) WHERE payment_date IS NULL"
+        ))
+        db.session.commit()
 
 
 # ============================================================
