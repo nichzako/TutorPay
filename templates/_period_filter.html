@@ -1,0 +1,86 @@
+{# Period Filter Partial — include in pages with: {% include '_period_filter.html' %} #}
+{# Requires variables: filter_action, period, report_month, report_year, period_label, thai_months, available_years #}
+{# Optional: date_from, date_to #}
+
+<div class="card" style="padding: 20px;">
+  <form method="GET" action="{{ filter_action }}" id="filterForm">
+    <div class="filter-bar">
+      <!-- Period Toggle -->
+      <div class="filter-group">
+        <label>ช่วงเวลา</label>
+        <div class="period-toggle">
+          <button type="button" class="period-btn {% if period == 'month' %}active{% endif %}" onclick="setPeriod('month')">📅 รายเดือน</button>
+          <button type="button" class="period-btn {% if period == 'year' %}active{% endif %}" onclick="setPeriod('year')">📆 รายปี</button>
+          <button type="button" class="period-btn {% if period == 'custom' %}active{% endif %}" onclick="setPeriod('custom')">🔧 กำหนดเอง</button>
+        </div>
+        <input type="hidden" name="period" id="periodInput" value="{{ period }}">
+      </div>
+
+      <!-- Student Filter (optional — only show if filter_students is defined) -->
+      {% if filter_students is defined and filter_students %}
+      <div class="filter-group">
+        <label>นักเรียน</label>
+        <select name="student_id" class="form-control" onchange="document.getElementById('filterForm').submit()">
+          <option value="0">👥 ทุกคน</option>
+          {% for s in filter_students %}
+          <option value="{{ s.id }}" {% if s.id == student_id %}selected{% endif %}>{{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Month Picker -->
+    <div class="picker-row" id="monthPickerGroup" style="{% if period != 'month' %}display:none;{% endif %}">
+      <div class="picker-container">
+        <button type="button" class="picker-nav-btn" id="prevMonth" aria-label="เดือนก่อนหน้า">‹</button>
+        <div class="picker-selects">
+          <select name="report_month" id="reportMonth" class="form-control picker-select">
+            {% for i in range(1, 13) %}
+            <option value="{{ i }}" {% if i == report_month %}selected{% endif %}>{{ thai_months[i] }}</option>
+            {% endfor %}
+          </select>
+          <select name="report_year" id="reportYearMonth" class="form-control picker-select">
+            {% for y in available_years %}
+            <option value="{{ y }}" {% if y == report_year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="button" class="picker-nav-btn" id="nextMonth" aria-label="เดือนถัดไป">›</button>
+      </div>
+    </div>
+
+    <!-- Year Picker -->
+    <div class="picker-row" id="yearPickerGroup" style="{% if period != 'year' %}display:none;{% endif %}">
+      <div class="picker-container">
+        <button type="button" class="picker-nav-btn" id="prevYear" aria-label="ปีก่อนหน้า">‹</button>
+        <div class="picker-selects">
+          <select name="report_year" id="reportYearOnly" class="form-control picker-select picker-select-wide">
+            {% for y in available_years %}
+            <option value="{{ y }}" {% if y == report_year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="button" class="picker-nav-btn" id="nextYear" aria-label="ปีถัดไป">›</button>
+      </div>
+    </div>
+
+    <!-- Custom Date Range -->
+    <div class="picker-row" id="dateRangeGroup" style="{% if period != 'custom' %}display:none;{% endif %}">
+      <div class="date-range">
+        <input type="date" name="date_from" class="form-control" value="{{ date_from }}" id="dateFrom">
+        <span class="date-sep">ถึง</span>
+        <input type="date" name="date_to" class="form-control" value="{{ date_to }}" id="dateTo">
+        <button type="submit" class="btn btn-primary btn-sm">🔍 ค้นหา</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Period Label -->
+<div class="period-label-bar">
+  🗓️ {{ period_label }}
+  {% if student_id is defined and student_id and filter_students is defined %}
+    <span class="period-label-student">| 👤 {{ filter_students|selectattr('id', 'equalto', student_id)|map(attribute='name')|first }}</span>
+  {% endif %}
+</div>

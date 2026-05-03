@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}{{ course.course_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>📚 {{ course.course_name }}</h2>
+  <p>นักเรียน: <strong>{{ course.student.name }}</strong></p>
+</div>
+
+{% if course.is_completed %}
+<div class="alert-banner">
+  <span class="alert-icon">🎉</span>
+  <div class="alert-text">
+    <strong>คอร์สนี้เรียนครบแล้ว!</strong> {{ course.student.name }} เรียนครบ {{ course.total_sessions }} ครั้งเรียบร้อยแล้ว
+  </div>
+</div>
+{% elif course.remaining_sessions <= 2 %}
+<div class="alert-banner" style="border-color: rgba(59, 130, 246, 0.3); background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(124, 58, 237, 0.08));">
+  <span class="alert-icon">📢</span>
+  <div class="alert-text">
+    <strong style="color: var(--accent-blue);">ใกล้จบคอร์ส!</strong> เหลืออีก {{ course.remaining_sessions }} ครั้ง
+  </div>
+</div>
+{% endif %}
+
+<!-- Course Info Cards -->
+<div class="stats-grid course-stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon purple">📚</div>
+    <div class="stat-label">จำนวนครั้งทั้งหมด</div>
+    <div class="stat-value">{{ course.total_sessions }} ครั้ง</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">✅</div>
+    <div class="stat-label">เรียนไปแล้ว</div>
+    <div class="stat-value text-green">{{ course.completed_sessions }} ครั้ง</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon orange">⏳</div>
+    <div class="stat-label">เหลืออีก</div>
+    <div class="stat-value text-orange">{{ course.remaining_sessions }} ครั้ง</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon blue">💰</div>
+    <div class="stat-label">ราคาคอร์ส</div>
+    <div class="stat-value text-blue">฿{{ "{:,.0f}".format(course.price_per_course) }}</div>
+  </div>
+</div>
+
+<!-- Progress Section -->
+<div class="card course-progress-card">
+  <div class="card-header">
+    <h3>📊 ความคืบหน้า</h3>
+    <span class="badge {% if course.is_completed %}badge-completed{% elif course.remaining_sessions <= 2 %}badge-alert{% else %}badge-active{% endif %}">
+      {% if course.is_completed %}✅ จบแล้ว{% elif course.remaining_sessions <= 2 %}⚠️ ใกล้จบ{% else %}🟢 กำลังเรียน{% endif %}
+    </span>
+  </div>
+
+  <!-- Progress Ring + Bar -->
+  <div class="course-progress-visual">
+    <div class="progress-ring-container">
+      <svg class="progress-ring" viewBox="0 0 120 120">
+        <circle class="progress-ring-bg" cx="60" cy="60" r="52" />
+        <circle class="progress-ring-fill {% if course.is_completed %}completed{% endif %}"
+                cx="60" cy="60" r="52"
+                stroke-dasharray="{{ (course.progress_percent / 100) * 326.73 }} {{ 326.73 - (course.progress_percent / 100) * 326.73 }}"
+                stroke-dashoffset="0" />
+      </svg>
+      <div class="progress-ring-label">
+        <span class="progress-ring-percent {% if course.is_completed %}text-green{% endif %}">{{ course.progress_percent }}%</span>
+      </div>
+    </div>
+    <div class="progress-detail-info">
+      <div class="progress-bar" style="height: 14px; border-radius: 10px;">
+        <div class="progress-fill" style="width: {{ course.progress_percent }}%; {% if course.is_completed %}background: var(--gradient-success);{% endif %}"></div>
+      </div>
+      <div class="progress-info" style="font-size: 15px; margin-top: 10px;">
+        <span>{{ course.completed_sessions }} / {{ course.total_sessions }} ครั้ง</span>
+        <span style="font-weight: 700; {% if course.is_completed %}color: var(--accent-green);{% endif %}">{{ course.progress_percent }}%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  {% if not course.is_completed %}
+  <div class="course-action-buttons">
+    <button type="button" class="btn btn-success btn-lg btn-touch" onclick="openModal('recordSessionModal')" id="recordSessionBtn">
+      ✅ บันทึกเรียน 1 ครั้ง
+    </button>
+    {% if course.completed_sessions > 0 %}
+    <form method="POST" action="{{ url_for('undo_session', course_id=course.id) }}" onsubmit="return confirm('ยกเลิกการบันทึกครั้งล่าสุด?')">
+      <button type="submit" class="btn btn-ghost btn-lg btn-touch" id="undoSessionBtn">
+        ↩️ ยกเลิกครั้งล่าสุด
+      </button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Session History -->
+<div class="card">
+  <div class="card-header">
+    <h3>📝 ประวัติการเรียน ({{ sessions|length }} ครั้ง)</h3>
+  </div>
+
+  {% if sessions %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>ครั้งที่</th>
+          <th>วันที่</th>
+          <th>เวลา</th>
+          <th>เนื้อหาที่เรียน</th>
+          <th>ปัญหา/ข้อติดขัด</th>
+          <th>ลบ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sessions %}
+        <tr>
+          <td style="font-weight: 700; color: var(--accent-purple-light);">{{ s.session_number }}</td>
+          <td>{{ s.session_date.strftime('%d/%m/%Y') }}</td>
+          <td>{{ s.session_time or '—' }}</td>
+          <td>{{ s.topic or '—' }}</td>
+          <td class="text-muted">{{ s.issues or '—' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('delete_session', session_id=s.id) }}" onsubmit="return confirm('ลบบันทึกครั้งที่ {{ s.session_number }}?')">
+              <button type="submit" class="btn-icon" title="ลบ">🗑️</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📝</div>
+    <p>ยังไม่มีประวัติการเรียน</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Back Navigation -->
+<div class="course-nav-buttons">
+  <a href="{{ url_for('student_courses', student_id=course.student_id) }}" class="btn btn-ghost btn-touch" id="backCoursesBtn">
+    ← กลับไปหน้าคอร์ส
+  </a>
+  <a href="{{ url_for('students_page') }}" class="btn btn-ghost btn-touch" id="backStudentsBtn">
+    👩‍🎓 หน้านักเรียน
+  </a>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-touch" id="backDashboardBtn">
+    📊 แดชบอร์ด
+  </a>
+</div>
+
+<!-- Record Session Modal -->
+<div class="modal-overlay" id="recordSessionModal">
+  <div class="modal">
+    <h3>✅ บันทึกการเรียนครั้งที่ {{ course.completed_sessions + 1 }}</h3>
+    <form method="POST" action="{{ url_for('record_session', course_id=course.id) }}">
+      <div class="form-row">
+        <div class="form-group">
+          <label>📅 วันที่เรียน *</label>
+          <input type="date" name="session_date" class="form-control" value="{{ today }}" required>
+        </div>
+        <div class="form-group">
+          <label>🕐 เวลาเรียน</label>
+          <input type="time" name="session_time" class="form-control" placeholder="14:00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>📝 เนื้อหาที่เรียน</label>
+        <input type="text" name="topic" class="form-control" placeholder="เช่น บทที่ 5 สมการเชิงเส้น">
+      </div>
+      <div class="form-group">
+        <label>⚠️ ปัญหา/ข้อติดขัด</label>
+        <input type="text" name="issues" class="form-control" placeholder="เช่น ยังไม่เข้าใจเรื่อง...">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('recordSessionModal')">ยกเลิก</button>
+        <button type="submit" class="btn btn-success">✅ บันทึก</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+});
+</script>
+{% endblock %}

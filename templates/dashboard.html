@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}แดชบอร์ด{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>📊 แดชบอร์ด</h2>
+  <p>ภาพรวมรายได้และข้อมูลการสอน</p>
+</div>
+
+{% include '_period_filter.html' %}
+
+<!-- Course Completion Alerts -->
+{% if completed_courses %}
+<div class="alert-banner">
+  <span class="alert-icon">🔔</span>
+  <div class="alert-text">
+    <strong>แจ้งเตือน!</strong> มี {{ completed_courses|length }} คอร์สที่เรียนครบแล้ว:
+    {% for c in completed_courses %}
+      <a href="{{ url_for('course_detail', course_id=c.id) }}">{{ c.course_name }} ({{ c.student.name }})</a>{% if not loop.last %}, {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Near-complete Courses Alert -->
+{% if near_complete_courses %}
+<div class="alert-banner" style="border-color: rgba(59, 130, 246, 0.3); background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(124, 58, 237, 0.08));">
+  <span class="alert-icon">📢</span>
+  <div class="alert-text">
+    <strong style="color: var(--accent-blue);">ใกล้จบคอร์ส!</strong>
+    {% for c in near_complete_courses %}
+      <a href="{{ url_for('course_detail', course_id=c.id) }}" style="color: var(--accent-blue);">{{ c.course_name }} (เหลือ {{ c.remaining_sessions }} ครั้ง)</a>{% if not loop.last %}, {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon purple">💰</div>
+    <div class="stat-label">รายได้ทั้งหมด</div>
+    <div class="stat-value text-green">฿{{ "{:,.0f}".format(total_income) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon red">💸</div>
+    <div class="stat-label">ค่าใช้จ่ายทั้งหมด</div>
+    <div class="stat-value text-red">฿{{ "{:,.0f}".format(total_expenses) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">📈</div>
+    <div class="stat-label">กำไรสุทธิ</div>
+    <div class="stat-value {% if total_income - total_expenses >= 0 %}text-green{% else %}text-red{% endif %}">
+      ฿{{ "{:,.0f}".format(total_income - total_expenses) }}
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon blue">👩‍🎓</div>
+    <div class="stat-label">จำนวนนักเรียน</div>
+    <div class="stat-value">{{ student_count }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon orange">📚</div>
+    <div class="stat-label">คอร์สที่กำลังสอน</div>
+    <div class="stat-value">{{ active_courses }}</div>
+    <div class="stat-sub">จบแล้ว {{ completed_course_count }} คอร์ส</div>
+  </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card">
+  <div class="card-header">
+    <h3>🕐 รายการล่าสุด</h3>
+  </div>
+  {% if recent_lessons %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>วันที่</th>
+          <th>นักเรียน</th>
+          <th>ประเภท</th>
+          <th>รายละเอียด</th>
+          <th class="text-right">จำนวนเงิน</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lesson in recent_lessons %}
+        <tr>
+          <td>{{ lesson.date.strftime('%d/%m/%Y') }}</td>
+          <td>{{ lesson.student.name }}</td>
+          <td><span class="badge badge-hourly">รายชั่วโมง</span></td>
+          <td>{{ lesson.hours }} ชม. × ฿{{ "{:,.0f}".format(lesson.rate_per_hour) }}</td>
+          <td class="text-right amount amount-positive">+฿{{ "{:,.0f}".format(lesson.total_amount) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📝</div>
+    <p>ยังไม่มีรายการสอนในช่วงเวลานี้</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Active Courses -->
+<div class="card">
+  <div class="card-header">
+    <h3>📚 คอร์สที่กำลังสอน</h3>
+  </div>
+  {% if active_course_list %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>ชื่อคอร์ส</th>
+          <th>นักเรียน</th>
+          <th>ความคืบหน้า</th>
+          <th>สถานะ</th>
+          <th class="text-right">ราคา</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for course in active_course_list %}
+        <tr>
+          <td><a href="{{ url_for('course_detail', course_id=course.id) }}" style="color: var(--accent-purple-light); text-decoration: none;">{{ course.course_name }}</a></td>
+          <td>{{ course.student.name }}</td>
+          <td style="min-width: 180px;">
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: {{ course.progress_percent }}%"></div>
+            </div>
+            <div class="progress-info">
+              <span>{{ course.completed_sessions }}/{{ course.total_sessions }} ครั้ง</span>
+              <span>{{ course.progress_percent }}%</span>
+            </div>
+          </td>
+          <td>
+            {% if course.is_completed %}
+              <span class="badge badge-completed">✅ จบแล้ว</span>
+            {% elif course.remaining_sessions <= 2 %}
+              <span class="badge badge-alert">⚠️ ใกล้จบ</span>
+            {% else %}
+              <span class="badge badge-active">🟢 กำลังเรียน</span>
+            {% endif %}
+          </td>
+          <td class="text-right amount">฿{{ "{:,.0f}".format(course.price_per_course) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📚</div>
+    <p>ยังไม่มีคอร์สเรียนในช่วงเวลานี้</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const form = document.getElementById('filterForm');
+const periodInput = document.getElementById('periodInput');
+
+function setPeriod(p) {
+  periodInput.value = p;
+  document.getElementById('monthPickerGroup').style.display = p === 'month' ? '' : 'none';
+  document.getElementById('yearPickerGroup').style.display = p === 'year' ? '' : 'none';
+  document.getElementById('dateRangeGroup').style.display = p === 'custom' ? '' : 'none';
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (p !== 'custom') form.submit();
+}
+
+document.getElementById('prevMonth').addEventListener('click', function() {
+  const mSel = document.getElementById('reportMonth');
+  const ySel = document.getElementById('reportYearMonth');
+  let m = parseInt(mSel.value), y = parseInt(ySel.value);
+  m--; if (m < 1) { m = 12; y--; }
+  mSel.value = m; ySel.value = y; form.submit();
+});
+document.getElementById('nextMonth').addEventListener('click', function() {
+  const mSel = document.getElementById('reportMonth');
+  const ySel = document.getElementById('reportYearMonth');
+  let m = parseInt(mSel.value), y = parseInt(ySel.value);
+  m++; if (m > 12) { m = 1; y++; }
+  mSel.value = m; ySel.value = y; form.submit();
+});
+document.getElementById('reportMonth').addEventListener('change', () => form.submit());
+document.getElementById('reportYearMonth').addEventListener('change', () => form.submit());
+document.getElementById('prevYear').addEventListener('click', function() {
+  const ySel = document.getElementById('reportYearOnly');
+  ySel.value = parseInt(ySel.value) - 1; form.submit();
+});
+document.getElementById('nextYear').addEventListener('click', function() {
+  const ySel = document.getElementById('reportYearOnly');
+  ySel.value = parseInt(ySel.value) + 1; form.submit();
+});
+document.getElementById('reportYearOnly').addEventListener('change', () => form.submit());
+</script>
+{% endblock %}

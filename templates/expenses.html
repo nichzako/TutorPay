@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}ค่าใช้จ่าย{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>💸 ค่าใช้จ่าย</h2>
+  <p>บันทึกค่าใช้จ่ายที่เกี่ยวข้องกับการสอน</p>
+</div>
+
+{% include '_period_filter.html' %}
+
+<!-- Expense Summary -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon red">💸</div>
+    <div class="stat-label">ค่าใช้จ่ายทั้งหมด</div>
+    <div class="stat-value text-red">฿{{ "{:,.0f}".format(total_expenses) }}</div>
+  </div>
+  {% for cat, amt in category_totals.items() %}
+  <div class="stat-card">
+    <div class="stat-icon orange">📁</div>
+    <div class="stat-label">{{ cat }}</div>
+    <div class="stat-value text-orange">฿{{ "{:,.0f}".format(amt) }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3>📋 รายการค่าใช้จ่าย</h3>
+    <button class="btn btn-primary" onclick="openModal('addExpenseModal')">➕ เพิ่มรายการ</button>
+  </div>
+
+  {% if expenses %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>วันที่</th>
+          <th>หมวดหมู่</th>
+          <th>รายละเอียด</th>
+          <th class="text-right">จำนวนเงิน</th>
+          <th>ลบ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for exp in expenses %}
+        <tr>
+          <td>{{ exp.date.strftime('%d/%m/%Y') }}</td>
+          <td><span class="category-tag">{{ exp.category }}</span></td>
+          <td>{{ exp.description or '—' }}</td>
+          <td class="text-right amount amount-negative">-฿{{ "{:,.0f}".format(exp.amount) }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('delete_expense', expense_id=exp.id) }}" onsubmit="return confirm('ลบรายการนี้?')">
+              <button type="submit" class="btn-icon">🗑️</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">💸</div>
+    <p>ยังไม่มีรายการค่าใช้จ่ายในช่วงเวลานี้</p>
+    <button class="btn btn-primary" onclick="openModal('addExpenseModal')">➕ เพิ่มรายการ</button>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Add Expense Modal -->
+<div class="modal-overlay" id="addExpenseModal">
+  <div class="modal">
+    <h3>➕ เพิ่มค่าใช้จ่าย</h3>
+    <form method="POST" action="{{ url_for('add_expense') }}">
+      <div class="form-group">
+        <label>หมวดหมู่ *</label>
+        <select name="category" class="form-control" required>
+          <option value="">-- เลือกหมวดหมู่ --</option>
+          <option value="ค่าเดินทาง">🚗 ค่าเดินทาง</option>
+          <option value="อุปกรณ์การสอน">📎 อุปกรณ์การสอน</option>
+          <option value="เอกสาร/สื่อการสอน">📄 เอกสาร/สื่อการสอน</option>
+          <option value="ค่าอินเทอร์เน็ต">🌐 ค่าอินเทอร์เน็ต</option>
+          <option value="ค่าสถานที่">🏠 ค่าสถานที่</option>
+          <option value="อื่นๆ">📌 อื่นๆ</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>จำนวนเงิน (บาท) *</label>
+          <input type="number" name="amount" class="form-control" step="1" min="0" placeholder="500" required>
+        </div>
+        <div class="form-group">
+          <label>วันที่ *</label>
+          <input type="date" name="date" class="form-control" value="{{ today }}" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>รายละเอียด</label>
+        <input type="text" name="description" class="form-control" placeholder="เช่น ค่ารถไปสอนที่บ้านนักเรียน">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('addExpenseModal')">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary">💾 บันทึก</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+});
+
+const form = document.getElementById('filterForm');
+const periodInput = document.getElementById('periodInput');
+
+function setPeriod(p) {
+  periodInput.value = p;
+  document.getElementById('monthPickerGroup').style.display = p === 'month' ? '' : 'none';
+  document.getElementById('yearPickerGroup').style.display = p === 'year' ? '' : 'none';
+  document.getElementById('dateRangeGroup').style.display = p === 'custom' ? '' : 'none';
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (p !== 'custom') form.submit();
+}
+
+document.getElementById('prevMonth').addEventListener('click', function() {
+  const mSel = document.getElementById('reportMonth');
+  const ySel = document.getElementById('reportYearMonth');
+  let m = parseInt(mSel.value), y = parseInt(ySel.value);
+  m--; if (m < 1) { m = 12; y--; }
+  mSel.value = m; ySel.value = y; form.submit();
+});
+document.getElementById('nextMonth').addEventListener('click', function() {
+  const mSel = document.getElementById('reportMonth');
+  const ySel = document.getElementById('reportYearMonth');
+  let m = parseInt(mSel.value), y = parseInt(ySel.value);
+  m++; if (m > 12) { m = 1; y++; }
+  mSel.value = m; ySel.value = y; form.submit();
+});
+document.getElementById('reportMonth').addEventListener('change', () => form.submit());
+document.getElementById('reportYearMonth').addEventListener('change', () => form.submit());
+document.getElementById('prevYear').addEventListener('click', function() {
+  const ySel = document.getElementById('reportYearOnly');
+  ySel.value = parseInt(ySel.value) - 1; form.submit();
+});
+document.getElementById('nextYear').addEventListener('click', function() {
+  const ySel = document.getElementById('reportYearOnly');
+  ySel.value = parseInt(ySel.value) + 1; form.submit();
+});
+document.getElementById('reportYearOnly').addEventListener('change', () => form.submit());
+</script>
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}รายงาน{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>📋 รายงานสรุป</h2>
+  <p>สรุปรายได้-ค่าใช้จ่ายตามช่วงเวลาและนักเรียน</p>
+</div>
+
+{% include '_period_filter.html' %}
+
+<!-- Summary Cards -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon blue">⏰</div>
+    <div class="stat-label">รายได้ (รายชั่วโมง)</div>
+    <div class="stat-value text-blue">฿{{ "{:,.0f}".format(hourly_income) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple">📚</div>
+    <div class="stat-label">รายได้ (คอร์ส)</div>
+    <div class="stat-value text-purple">฿{{ "{:,.0f}".format(course_income) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">💰</div>
+    <div class="stat-label">รายได้รวม</div>
+    <div class="stat-value text-green">฿{{ "{:,.0f}".format(total_income) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon red">💸</div>
+    <div class="stat-label">ค่าใช้จ่ายรวม</div>
+    <div class="stat-value text-red">฿{{ "{:,.0f}".format(total_expenses) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon {% if net_profit >= 0 %}green{% else %}red{% endif %}">📈</div>
+    <div class="stat-label">กำไรสุทธิ</div>
+    <div class="stat-value {% if net_profit >= 0 %}text-green{% else %}text-red{% endif %}">฿{{ "{:,.0f}".format(net_profit) }}</div>
+  </div>
+</div>
+
+<!-- Transactions Table -->
+<div class="card">
+  <div class="card-header">
+    <h3>📝 รายการทั้งหมด ({{ transactions|length }} รายการ)</h3>
+  </div>
+
+  {% if transactions %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>วันที่</th>
+          <th>ประเภท</th>
+          <th>หมวดหมู่</th>
+          <th>รายละเอียด</th>
+          <th class="text-right">จำนวนเงิน</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in transactions %}
+        <tr>
+          <td>{{ t.date.strftime('%d/%m/%Y') if t.date is not string else t.date }}</td>
+          <td>
+            {% if t.type == 'income' %}
+              <span class="badge badge-completed">💵 รายได้</span>
+            {% else %}
+              <span class="badge badge-alert" style="animation: none;">💸 ค่าใช้จ่าย</span>
+            {% endif %}
+          </td>
+          <td><span class="category-tag">{{ t.category }}</span></td>
+          <td>{{ t.description }}</td>
+          <td class="text-right amount {% if t.type == 'income' %}amount-positive{% else %}amount-negative{% endif %}">
+            {% if t.type == 'income' %}+{% else %}-{% endif %}฿{{ "{:,.0f}".format(t.amount) }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="border-top: 2px solid var(--border-glass);">
+          <td colspan="4" style="font-weight: 700; padding-top: 16px;">รวมกำไรสุทธิ</td>
+          <td class="text-right amount {% if net_profit >= 0 %}amount-positive{% else %}amount-negative{% endif %}" style="padding-top: 16px; font-size: 16px;">
+            ฿{{ "{:,.0f}".format(net_profit) }}
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📋</div>
+    <p>ไม่มีรายการในช่วงเวลาที่เลือก</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const form = document.getElementById('filterForm');
+const periodInput = document.getElementById('periodInput');
+
+function setPeriod(p) {
+  periodInput.value = p;
+  document.getElementById('monthPickerGroup').style.display = p === 'month' ? '' : 'none';
+  document.getElementById('yearPickerGroup').style.display = p === 'year' ? '' : 'none';
+  document.getElementById('dateRangeGroup').style.display = p === 'custom' ? '' : 'none';
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (p !== 'custom') form.submit();
+}
+
+document.getElementById('prevMonth').addEventListener('click', function() {
+  const mSel = document.getElementById('reportMonth');
+  const ySel = document.getElementById('reportYearMonth');
+  let m = parseInt(mSel.value), y = parseInt(ySel.value);
+  m--; if (m < 1) { m = 12; y--; }
+  mSel.value = m; ySel.value = y; form.submit();
+});
+document.getElementById('nextMonth').addEventListener('click', function() {
+  const mSel = document.getElementById('reportMonth');
+  const ySel = document.getElementById('reportYearMonth');
+  let m = parseInt(mSel.value), y = parseInt(ySel.value);
+  m++; if (m > 12) { m = 1; y++; }
+  mSel.value = m; ySel.value = y; form.submit();
+});
+document.getElementById('reportMonth').addEventListener('change', () => form.submit());
+document.getElementById('reportYearMonth').addEventListener('change', () => form.submit());
+document.getElementById('prevYear').addEventListener('click', function() {
+  const ySel = document.getElementById('reportYearOnly');
+  ySel.value = parseInt(ySel.value) - 1; form.submit();
+});
+document.getElementById('nextYear').addEventListener('click', function() {
+  const ySel = document.getElementById('reportYearOnly');
+  ySel.value = parseInt(ySel.value) + 1; form.submit();
+});
+document.getElementById('reportYearOnly').addEventListener('change', () => form.submit());
+</script>
+{% endblock %}

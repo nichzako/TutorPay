@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}รายได้{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>💵 รายได้</h2>
+  <p>บันทึกรายได้จากการสอนทั้งแบบรายชั่วโมงและคอร์ส</p>
+</div>
+
+{% include '_period_filter.html' %}
+
+<!-- Income Summary -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon green">💵</div>
+    <div class="stat-label">รายได้รวม (รายชั่วโมง)</div>
+    <div class="stat-value text-green">฿{{ "{:,.0f}".format(hourly_income) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple">📚</div>
+    <div class="stat-label">รายได้รวม (คอร์ส)</div>
+    <div class="stat-value text-purple">฿{{ "{:,.0f}".format(course_income) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon blue">💰</div>
+    <div class="stat-label">รายได้ทั้งหมด</div>
+    <div class="stat-value text-blue">฿{{ "{:,.0f}".format(hourly_income + course_income) }}</div>
+  </div>
+</div>
+
+<!-- Hourly Lessons -->
+<div class="card">
+  <div class="card-header">
+    <h3>⏰ บันทึกสอนรายชั่วโมง</h3>
+    <button class="btn btn-primary" onclick="openModal('addLessonModal')">➕ เพิ่มรายการ</button>
+  </div>
+
+  {% if hourly_lessons %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>วันที่</th>
+          <th>นักเรียน</th>
+          <th>ชั่วโมง</th>
+          <th>เรท/ชม.</th>
+          <th>ช่องทาง</th>
+          <th>Ref</th>
+          <th>หมายเหตุ</th>
+          <th class="text-right">จำนวนเงิน</th>
+          <th>ลบ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lesson in hourly_lessons %}
+        <tr>
+          <td>{{ lesson.date.strftime('%d/%m/%Y') }}</td>
+          <td style="font-weight: 600;">{{ lesson.student.name }}</td>
+          <td>{{ lesson.hours }} ชม.</td>
+          <td>฿{{ "{:,.0f}".format(lesson.rate_per_hour) }}</td>
+          <td>
+            {% set pm = lesson.payment_method or 'โอนธนาคาร' %}
+            <span class="payment-badge {% if 'สด' in pm %}payment-cash{% elif 'พร้อม' in pm %}payment-promptpay{% else %}payment-transfer{% endif %}">{{ pm }}</span>
+          </td>
+          <td class="text-muted" style="font-size:12px;">{{ lesson.transfer_ref or '—' }}</td>
+          <td class="text-muted">{{ lesson.note or '—' }}</td>
+          <td class="text-right amount amount-positive">+฿{{ "{:,.0f}".format(lesson.total_amount) }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('delete_lesson', lesson_id=lesson.id) }}" onsubmit="return confirm('ลบรายการนี้?')">
+              <button type="submit" class="btn-icon">🗑️</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">⏰</div>
+    <p>ยังไม่มีรายการสอนรายชั่วโมงในช่วงเวลานี้</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Course Income -->
+<div class="card">
+  <div class="card-header">
+    <h3>📚 รายได้จากคอร์ส</h3>
+  </div>
+
+  {% if courses %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>ชื่อคอร์ส</th>
+          <th>นักเรียน</th>
+          <th>ความคืบหน้า</th>
+          <th>สถานะ</th>
+          <th class="text-right">ราคาคอร์ส</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for course in courses %}
+        <tr>
+          <td><a href="{{ url_for('course_detail', course_id=course.id) }}" style="color: var(--accent-purple-light); text-decoration: none; font-weight: 600;">{{ course.course_name }}</a></td>
+          <td>{{ course.student.name }}</td>
+          <td>{{ course.completed_sessions }}/{{ course.total_sessions }} ครั้ง</td>
+          <td>
+            {% if course.is_completed %}
+              <span class="badge badge-completed">✅ จบแล้ว</span>
+            {% else %}
+              <span class="badge badge-active">🟢 กำลังเรียน</span>
+            {% endif %}
+          </td>
+          <td class="text-right amount amount-positive">+฿{{ "{:,.0f}".format(course.price_per_course) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📚</div>
+    <p>ยังไม่มีคอร์สเรียนในช่วงเวลานี้</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Add Hourly Lesson Modal -->
+<div class="modal-overlay" id="addLessonModal">
+  <div class="modal">
+    <h3>➕ เพิ่มรายการสอนรายชั่วโมง</h3>
+    <form method="POST" action="{{ url_for('add_hourly_lesson') }}">
+      <div class="form-group">
+        <label>นักเรียน *</label>
+        <select name="student_id" class="form-control" required>
+          <option value="">-- เลือกนักเรียน --</option>
+          {% for s in students %}
+          <option value="{{ s.id }}">{{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>วันที่ *</label>
+          <input type="date" name="date" class="form-control" value="{{ today }}" required>
+        </div>
+        <div class="form-group">
+          <label>จำนวนชั่วโมง *</label>
+          <input type="number" name="hours" class="form-control" step="0.5" min="0.5" placeholder="1.5" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>เรท/ชั่วโมง (บาท) *</label>
+        <input type="number" name="rate_per_hour" class="form-control" step="50" min="0" placeholder="500" required>
+      </div>
+      <div class="form-group">
+        <label>หมายเหตุ</label>
+        <input type="text" name="note" class="form-control" placeholder="เช่น สอนคณิตศาสตร์ บทที่ 5">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>ช่องทางรับเงิน</label>
+          <select name="payment_method" class="form-control">
+            <option value="โอนธนาคาร">🏦 โอนธนาคาร</option>
+            <option value="พร้อมเพย์">📱 พร้อมเพย์</option>
+            <option value="เงินสด">💵 เงินสด</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>เลขอ้างอิง/สลิป <span class="text-muted">(optional)</span></label>
+          <input type="text" name="transfer_ref" class="form-control" placeholder="REF-xxxxxxxx">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('addLessonModal')">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary">💾 บันทึก</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+});
+
+const form = document.getElementById('filterForm');
+const periodInput = document.getElementById('periodInput');
+
+function setPeriod(p) {
+  periodInput.value = p;
+  document.getElementById('monthPickerGroup').style.display = p === 'month' ? '' : 'none';
+  document.getElementById('yearPickerGroup').style.display = p === 'year' ? '' : 'none';
+  document.getElementById('dateRangeGroup').style.display = p === 'custom' ? '' : 'none';
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (p !== 'custom') form.submit();
+}
+
+document.getElementById('prevMonth').addEventListener('click', function() {
+  const mSel = document.getElementById('reportMonth');
+  const ySel = document.getElementById('reportYearMonth');
+  let m = parseInt(mSel.value), y = parseInt(ySel.value);
+  m--; if (m < 1) { m = 12; y--; }
+  mSel.value = m; ySel.value = y; form.submit();
+});
+document.getElementById('nextMonth').addEventListener('click', function() {
+  const mSel = document.getElementById('reportMonth');
+  const ySel = document.getElementById('reportYearMonth');
+  let m = parseInt(mSel.value), y = parseInt(ySel.value);
+  m++; if (m > 12) { m = 1; y++; }
+  mSel.value = m; ySel.value = y; form.submit();
+});
+document.getElementById('reportMonth').addEventListener('change', () => form.submit());
+document.getElementById('reportYearMonth').addEventListener('change', () => form.submit());
+document.getElementById('prevYear').addEventListener('click', function() {
+  const ySel = document.getElementById('reportYearOnly');
+  ySel.value = parseInt(ySel.value) - 1; form.submit();
+});
+document.getElementById('nextYear').addEventListener('click', function() {
+  const ySel = document.getElementById('reportYearOnly');
+  ySel.value = parseInt(ySel.value) + 1; form.submit();
+});
+document.getElementById('reportYearOnly').addEventListener('change', () => form.submit());
+</script>
+{% endblock %}

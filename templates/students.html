@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}นักเรียน{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>👩‍🎓 นักเรียน</h2>
+  <p>จัดการรายชื่อนักเรียนที่เรียนทั้งแบบรายชั่วโมงและคอร์ส</p>
+</div>
+
+{% include '_period_filter.html' %}
+
+<div class="card">
+  <div class="card-header">
+    <h3>รายชื่อนักเรียนทั้งหมด ({{ students|length }})</h3>
+    <button class="btn btn-primary" onclick="openModal('addStudentModal')">➕ เพิ่มนักเรียน</button>
+  </div>
+
+  {% if students %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>ชื่อ</th>
+          <th>โทรศัพท์</th>
+          <th>อีเมล</th>
+          <th>ประเภทการเรียน</th>
+          <th class="text-right">รายได้ ({{ period_label }})</th>
+          <th>จัดการ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for student in students %}
+        <tr>
+          <td style="font-weight: 600;">{{ student.name }}</td>
+          <td>{{ student.phone or '—' }}</td>
+          <td>{{ student.email or '—' }}</td>
+          <td>
+            {% for t in student.enrollment_types %}
+              {% if t == 'คอร์ส' %}
+                <span class="badge badge-course">📚 {{ t }}</span>
+              {% elif t == 'รายชั่วโมง' %}
+                <span class="badge badge-hourly">⏰ {{ t }}</span>
+              {% else %}
+                <span class="badge" style="background: var(--bg-glass); color: var(--text-muted);">{{ t }}</span>
+              {% endif %}
+            {% endfor %}
+          </td>
+          <td class="text-right amount amount-positive">฿{{ "{:,.0f}".format(student_income_map.get(student.id, 0)) }}</td>
+          <td>
+            <div class="flex gap-2">
+              <a href="{{ url_for('student_courses', student_id=student.id) }}" class="btn btn-sm btn-ghost">📚 คอร์ส</a>
+              <form method="POST" action="{{ url_for('delete_student', student_id=student.id) }}" style="display:inline" onsubmit="return confirm('ลบนักเรียน {{ student.name }}?')">
+                <button type="submit" class="btn-icon" title="ลบ">🗑️</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">👩‍🎓</div>
+    <p>ยังไม่มีนักเรียน เริ่มเพิ่มนักเรียนคนแรกเลย!</p>
+    <button class="btn btn-primary" onclick="openModal('addStudentModal')">➕ เพิ่มนักเรียน</button>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Add Student Modal -->
+<div class="modal-overlay" id="addStudentModal">
+  <div class="modal">
+    <h3>➕ เพิ่มนักเรียนใหม่</h3>
+    <form method="POST" action="{{ url_for('add_student') }}">
+      <div class="form-group">
+        <label>ชื่อ-นามสกุล *</label>
+        <input type="text" name="name" class="form-control" placeholder="กรอกชื่อนักเรียน" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>โทรศัพท์</label>
+          <input type="text" name="phone" class="form-control" placeholder="0xx-xxx-xxxx">
+        </div>
+        <div class="form-group">
+          <label>อีเมล</label>
+          <input type="email" name="email" class="form-control" placeholder="email@example.com">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('addStudentModal')">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary">💾 บันทึก</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+});
+
+const form = document.getElementById('filterForm');
+const periodInput = document.getElementById('periodInput');
+
+function setPeriod(p) {
+  periodInput.value = p;
+  document.getElementById('monthPickerGroup').style.display = p === 'month' ? '' : 'none';
+  document.getElementById('yearPickerGroup').style.display = p === 'year' ? '' : 'none';
+  document.getElementById('dateRangeGroup').style.display = p === 'custom' ? '' : 'none';
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (p !== 'custom') form.submit();
+}
+
+document.getElementById('prevMonth').addEventListener('click', function() {
+  const mSel = document.getElementById('reportMonth');
+  const ySel = document.getElementById('reportYearMonth');
+  let m = parseInt(mSel.value), y = parseInt(ySel.value);
+  m--; if (m < 1) { m = 12; y--; }
+  mSel.value = m; ySel.value = y; form.submit();
+});
+document.getElementById('nextMonth').addEventListener('click', function() {
+  const mSel = document.getElementById('reportMonth');
+  const ySel = document.getElementById('reportYearMonth');
+  let m = parseInt(mSel.value), y = parseInt(ySel.value);
+  m++; if (m > 12) { m = 1; y++; }
+  mSel.value = m; ySel.value = y; form.submit();
+});
+document.getElementById('reportMonth').addEventListener('change', () => form.submit());
+document.getElementById('reportYearMonth').addEventListener('change', () => form.submit());
+document.getElementById('prevYear').addEventListener('click', function() {
+  const ySel = document.getElementById('reportYearOnly');
+  ySel.value = parseInt(ySel.value) - 1; form.submit();
+});
+document.getElementById('nextYear').addEventListener('click', function() {
+  const ySel = document.getElementById('reportYearOnly');
+  ySel.value = parseInt(ySel.value) + 1; form.submit();
+});
+document.getElementById('reportYearOnly').addEventListener('change', () => form.submit());
+</script>
+{% endblock %}

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>เข้าสู่ระบบ — TutorPay</title>
+  <meta name="description" content="เข้าสู่ระบบ TutorPay ระบบจัดการรายได้ครูสอนพิเศษ">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="brand-icon" style="width: 56px; height: 56px; font-size: 28px; margin: 0 auto 12px;">💰</div>
+        <h1>TutorPay</h1>
+        <p>ระบบจัดการรายได้ครูสอนพิเศษ</p>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash-message flash-{{ category }}">
+            {% if category == 'success' %}✅{% elif category == 'warning' %}⚠️{% else %}❌{% endif %}
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endwith %}
+
+      <form method="POST" action="{{ url_for('login') }}">
+        <div class="form-group">
+          <label>📧 อีเมล</label>
+          <input type="email" name="email" class="form-control" placeholder="email@example.com" required autofocus>
+        </div>
+        <div class="form-group">
+          <label>🔒 รหัสผ่าน</label>
+          <input type="password" name="password" class="form-control" placeholder="กรอกรหัสผ่าน" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="loginBtn">
+          🔑 เข้าสู่ระบบ
+        </button>
+      </form>
+
+      <div class="auth-footer">
+        <p>ยังไม่มีบัญชี? <a href="{{ url_for('register') }}">สมัครสมาชิก</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

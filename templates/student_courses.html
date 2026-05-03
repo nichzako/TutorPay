@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}คอร์สของ {{ student.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>📚 คอร์สของ {{ student.name }}</h2>
+  <p>จัดการคอร์สเรียนทั้งหมดของ {{ student.name }}</p>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3>คอร์สทั้งหมด ({{ courses|length }})</h3>
+    <button class="btn btn-primary" onclick="openModal('addCourseModal')">➕ เพิ่มคอร์ส</button>
+  </div>
+
+  {% if courses %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>ชื่อคอร์ส</th>
+          <th>ความคืบหน้า</th>
+          <th>สถานะ</th>
+          <th class="text-right">ราคา</th>
+          <th>จัดการ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for course in courses %}
+        <tr>
+          <td style="font-weight: 600;">
+            <a href="{{ url_for('course_detail', course_id=course.id) }}" style="color: var(--accent-purple-light); text-decoration: none;">{{ course.course_name }}</a>
+          </td>
+          <td style="min-width: 200px;">
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: {{ course.progress_percent }}%"></div>
+            </div>
+            <div class="progress-info">
+              <span>{{ course.completed_sessions }}/{{ course.total_sessions }} ครั้ง</span>
+              <span>{{ course.progress_percent }}%</span>
+            </div>
+          </td>
+          <td>
+            {% if course.is_completed %}
+              <span class="badge badge-completed">✅ จบแล้ว</span>
+            {% elif course.remaining_sessions <= 2 %}
+              <span class="badge badge-alert">⚠️ ใกล้จบ</span>
+            {% else %}
+              <span class="badge badge-active">🟢 กำลังเรียน</span>
+            {% endif %}
+          </td>
+          <td class="text-right amount">฿{{ "{:,.0f}".format(course.price_per_course) }}</td>
+          <td>
+            <div class="flex gap-2">
+              <a href="{{ url_for('course_detail', course_id=course.id) }}" class="btn btn-sm btn-ghost">📋 รายละเอียด</a>
+              <form method="POST" action="{{ url_for('delete_course', course_id=course.id) }}" style="display:inline" onsubmit="return confirm('ลบคอร์ส {{ course.course_name }}?')">
+                <button type="submit" class="btn-icon">🗑️</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📚</div>
+    <p>{{ student.name }} ยังไม่มีคอร์สเรียน</p>
+    <button class="btn btn-primary" onclick="openModal('addCourseModal')">➕ เพิ่มคอร์ส</button>
+  </div>
+  {% endif %}
+</div>
+
+<div style="margin-top: 8px;">
+  <a href="{{ url_for('students_page') }}" class="btn btn-ghost">← กลับไปหน้านักเรียน</a>
+</div>
+
+<!-- Add Course Modal -->
+<div class="modal-overlay" id="addCourseModal">
+  <div class="modal">
+    <h3>➕ เพิ่มคอร์สใหม่ให้ {{ student.name }}</h3>
+    <form method="POST" action="{{ url_for('add_course', student_id=student.id) }}">
+      <div class="form-group">
+        <label>ชื่อคอร์ส *</label>
+        <input type="text" name="course_name" class="form-control" placeholder="เช่น คณิตศาสตร์ ม.3" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>จำนวนครั้งที่เรียน *</label>
+          <input type="number" name="total_sessions" class="form-control" min="1" placeholder="10" required>
+        </div>
+        <div class="form-group">
+          <label>ราคาคอร์ส (บาท) *</label>
+          <input type="number" name="price_per_course" class="form-control" min="0" step="100" placeholder="5000" required>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('addCourseModal')">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary">💾 บันทึก</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+});
+</script>
+{% endblock %}

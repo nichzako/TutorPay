@@ -1,0 +1,11 @@
+instance/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv/
+.agent/
+*.jpg
+*.png
+implementation_plan.md
+implementation_plan_tax

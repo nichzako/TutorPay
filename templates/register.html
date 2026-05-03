@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>สมัครสมาชิก — TutorPay</title>
+  <meta name="description" content="สมัครสมาชิก TutorPay ระบบจัดการรายได้ครูสอนพิเศษ">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="brand-icon" style="width: 56px; height: 56px; font-size: 28px; margin: 0 auto 12px;">💰</div>
+        <h1>TutorPay</h1>
+        <p>สมัครสมาชิกเพื่อเริ่มใช้งาน</p>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash-message flash-{{ category }}">
+            {% if category == 'success' %}✅{% elif category == 'warning' %}⚠️{% else %}❌{% endif %}
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endwith %}
+
+      <form method="POST" action="{{ url_for('register') }}">
+        <div class="form-group">
+          <label>👤 ชื่อที่แสดง</label>
+          <input type="text" name="display_name" class="form-control" placeholder="เช่น ครูนิช" required autofocus>
+        </div>
+        <div class="form-group">
+          <label>📧 อีเมล</label>
+          <input type="email" name="email" class="form-control" placeholder="email@example.com" required>
+        </div>
+        <div class="form-group">
+          <label>🔒 รหัสผ่าน (อย่างน้อย 6 ตัว)</label>
+          <input type="password" name="password" class="form-control" placeholder="กรอกรหัสผ่าน" minlength="6" required>
+        </div>
+        <div class="form-group">
+          <label>🔒 ยืนยันรหัสผ่าน</label>
+          <input type="password" name="confirm_password" class="form-control" placeholder="กรอกรหัสผ่านอีกครั้ง" minlength="6" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="registerBtn">
+          📝 สมัครสมาชิก
+        </button>
+      </form>
+
+      <div class="auth-footer">
+        <p>มีบัญชีแล้ว? <a href="{{ url_for('login') }}">เข้าสู่ระบบ</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

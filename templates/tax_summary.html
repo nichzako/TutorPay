@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}สรุปภาษีประจำปี{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>🧾 สรุปภาษีประจำปี</h2>
+  <p>คำนวณภาษีเงินได้บุคคลธรรมดา มาตรา 40(8) และจัดการเอกสารสำหรับยื่น ภ.ง.ด.90</p>
+</div>
+
+<!-- Year Selector -->
+<form method="GET" action="{{ url_for('tax_summary_page') }}" id="taxForm">
+  <div class="tax-year-bar card" style="margin-bottom: 28px; padding: 18px 24px; flex-direction: row;">
+    <label>📅 ปีภาษี (ค.ศ.)</label>
+    <select name="tax_year" class="form-control tax-year-select" id="taxYearSelect">
+      {% for y in available_years %}
+      <option value="{{ y }}" {% if y == tax_year %}selected{% endif %}>{{ y }} (พ.ศ. {{ y + 543 }})</option>
+      {% endfor %}
+    </select>
+    <input type="hidden" name="extra_deductions" id="extraDeductionsInput" value="{{ extra_deductions }}">
+    <a href="{{ url_for('export_income_csv', tax_year=tax_year) }}" class="btn btn-success btn-sm" style="margin-left: auto;">
+      📥 ดาวน์โหลด CSV
+    </a>
+  </div>
+</form>
+
+<!-- Income Stats -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon green">💵</div>
+    <div class="stat-label">รายได้รวมทั้งปี</div>
+    <div class="stat-value text-green">฿{{ "{:,.0f}".format(total_income) }}</div>
+    <div class="stat-sub">{{ lesson_count }} รายการ + {{ course_count }} คอร์ส</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon blue">📊</div>
+    <div class="stat-label">รายได้รายชั่วโมง</div>
+    <div class="stat-value text-blue">฿{{ "{:,.0f}".format(hourly_total) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple">📚</div>
+    <div class="stat-label">รายได้จากคอร์ส</div>
+    <div class="stat-value text-purple">฿{{ "{:,.0f}".format(course_total) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon {% if tax_amount == 0 %}green{% else %}orange{% endif %}">🏛️</div>
+    <div class="stat-label">ภาษีที่ต้องจ่าย</div>
+    <div class="stat-value {% if tax_amount == 0 %}text-green{% else %}text-orange{% endif %}">฿{{ "{:,.0f}".format(tax_amount) }}</div>
+    <div class="stat-sub">{% if tax_amount == 0 %}ยกเว้นภาษี ✅{% else %}กรุณาชำระก่อน 31 มี.ค.{% endif %}</div>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+
+  <!-- Tax Calculation -->
+  <div class="card">
+    <div class="card-header">
+      <h3>🧮 คำนวณภาษี (มาตรา 40(8))</h3>
+    </div>
+    <div class="tax-calc-box">
+      <div class="tax-calc-row">
+        <span class="tax-calc-label">รายได้รวมทั้งปี</span>
+        <span class="tax-calc-value">฿{{ "{:,.0f}".format(total_income) }}</span>
+      </div>
+      <div class="tax-calc-row">
+        <span class="tax-calc-label">หัก ค่าใช้จ่ายเหมา 60%</span>
+        <span class="tax-calc-value tax-calc-deduct">- ฿{{ "{:,.0f}".format(expense_deduction) }}</span>
+      </div>
+      <div class="tax-calc-row">
+        <span class="tax-calc-label">หัก ลดหย่อนส่วนตัว</span>
+        <span class="tax-calc-value tax-calc-deduct">- ฿60,000</span>
+      </div>
+      {% if extra_deductions > 0 %}
+      <div class="tax-calc-row">
+        <span class="tax-calc-label">หัก ลดหย่อนเพิ่มเติม</span>
+        <span class="tax-calc-value tax-calc-deduct">- ฿{{ "{:,.0f}".format(extra_deductions) }}</span>
+      </div>
+      {% endif %}
+      <div class="tax-calc-row divider">
+        <span class="tax-calc-label" style="font-weight:700;">เงินได้สุทธิ</span>
+        <span class="tax-calc-value tax-calc-net">฿{{ "{:,.0f}".format(net_income) }}</span>
+      </div>
+    </div>
+
+    <!-- Tax Result -->
+    <div class="tax-result-badge {% if tax_amount == 0 %}tax-result-zero{% else %}tax-result-nonzero{% endif %}">
+      <div class="tax-result-icon">{% if tax_amount == 0 %}🎉{% else %}💳{% endif %}</div>
+      <div>
+        <div class="tax-result-label">ภาษีที่ต้องชำระ (ภ.ง.ด.90)</div>
+        <div class="tax-result-amount">฿{{ "{:,.0f}".format(tax_amount) }}</div>
+        {% if tax_amount == 0 %}
+        <div style="font-size:13px; color: var(--accent-green); margin-top:4px;">เงินได้สุทธิไม่ถึง 150,000 บาท — ยกเว้นภาษีทั้งหมด</div>
+        {% else %}
+        <div style="font-size:13px; color: var(--accent-orange); margin-top:4px;">กรุณายื่นแบบ ภ.ง.ด.90 ภายใน 31 มี.ค.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Extra Deductions Adjuster -->
+    <div class="mt-4" style="padding-top: 16px; border-top: 1px solid var(--border-glass);">
+      <label style="font-size:13px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:8px;">
+        ➕ ลดหย่อนเพิ่มเติม (ประกัน/SSF/บริจาค)
+      </label>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <input type="number" id="extraInput" class="form-control" placeholder="0" value="{{ extra_deductions }}" min="0" step="1000" style="max-width:180px;">
+        <button onclick="applyExtra()" class="btn btn-ghost btn-sm">คำนวณใหม่</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monthly Bar Chart -->
+  <div class="card">
+    <div class="card-header">
+      <h3>📈 รายได้รายเดือน {{ tax_year }}</h3>
+    </div>
+    {% set max_month = monthly_income.values() | max %}
+    <div class="month-chart" id="monthChart">
+      {% for m in range(1, 13) %}
+      {% set val = monthly_income[m] %}
+      {% set pct = ((val / max_month * 100) | round(1)) if max_month > 0 else 0 %}
+      <div class="month-bar-wrap" title="{{ thai_months[m] }}: ฿{{ '{:,.0f}'.format(val) }}">
+        <div class="month-bar" style="height: {{ pct }}%;"></div>
+        <div class="month-label">{{ thai_months[m][:3] }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Payment Breakdown -->
+    {% if payment_breakdown %}
+    <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-glass);">
+      <h4 style="font-size:14px; font-weight:600; margin-bottom:14px; color:var(--text-secondary);">ช่องทางรับเงิน</h4>
+      {% for pm, amount in payment_breakdown.items() %}
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span class="payment-badge {% if 'สด' in pm %}payment-cash{% elif 'พร้อม' in pm %}payment-promptpay{% else %}payment-transfer{% endif %}">
+          {{ pm }}
+        </span>
+        <span style="font-weight:700;">฿{{ "{:,.0f}".format(amount) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Tax Bracket Reference -->
+    <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-glass);">
+      <h4 style="font-size:13px; font-weight:600; margin-bottom:12px; color:var(--text-secondary);">อัตราภาษีขั้นบันได</h4>
+      <table style="font-size:12px;">
+        <thead>
+          <tr><th>เงินได้สุทธิ</th><th class="text-right">อัตรา</th></tr>
+        </thead>
+        <tbody>
+          <tr {% if net_income <= 150000 %}style="color:var(--accent-green);font-weight:700;"{% endif %}><td>0 – 150,000</td><td class="text-right">ยกเว้น</td></tr>
+          <tr {% if 150000 < net_income <= 300000 %}style="color:var(--accent-orange);font-weight:700;"{% endif %}><td>150,001 – 300,000</td><td class="text-right">5%</td></tr>
+          <tr {% if 300000 < net_income <= 500000 %}style="color:var(--accent-orange);font-weight:700;"{% endif %}><td>300,001 – 500,000</td><td class="text-right">10%</td></tr>
+          <tr {% if 500000 < net_income <= 750000 %}style="color:var(--accent-orange);font-weight:700;"{% endif %}><td>500,001 – 750,000</td><td class="text-right">15%</td></tr>
+          <tr {% if net_income > 750000 %}style="color:var(--accent-red);font-weight:700;"{% endif %}><td>750,001+</td><td class="text-right">20%+</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Document Checklist -->
+<div class="card" style="margin-top: 24px;">
+  <div class="card-header">
+    <h3>📁 เช็คลิสต์เอกสารประจำปี {{ tax_year }}</h3>
+    <span id="checkCount" class="badge badge-active">0 / 7</span>
+  </div>
+  <p style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">เก็บเอกสารเหล่านี้อย่างน้อย 5 ปี — ติ๊กถูกเมื่อเตรียมพร้อมแล้ว (บันทึกในเครื่อง)</p>
+  <div class="checklist" id="checklist">
+    <label class="checklist-item" onclick="toggleCheck(this)">
+      <input type="checkbox" data-id="doc1">
+      <div class="checklist-text">
+        <div class="checklist-title">📊 สมุดรายรับทั้งปี (Export จาก TutorPay)</div>
+        <div class="checklist-desc">ตารางบันทึกรายได้พร้อมชื่อนักเรียน ช่องทาง และเลขอ้างอิง</div>
+      </div>
+    </label>
+    <label class="checklist-item" onclick="toggleCheck(this)">
+      <input type="checkbox" data-id="doc2">
+      <div class="checklist-text">
+        <div class="checklist-title">🏦 Bank Statement บัญชีรายได้สอนพิเศษ (ม.ค.–ธ.ค. {{ tax_year }})</div>
+        <div class="checklist-desc">ขอจากธนาคารหรือ Export จาก Mobile Banking</div>
+      </div>
+    </label>
+    <label class="checklist-item" onclick="toggleCheck(this)">
+      <input type="checkbox" data-id="doc3">
+      <div class="checklist-text">
+        <div class="checklist-title">📱 สลิปโอนเงิน / Screenshot จากนักเรียน</div>
+        <div class="checklist-desc">จัดเก็บในโฟลเดอร์รายเดือน ตั้งชื่อว่า วันที่_ชื่อนักเรียน_จำนวนเงิน</div>
+      </div>
+    </label>
+    <label class="checklist-item" onclick="toggleCheck(this)">
+      <input type="checkbox" data-id="doc4">
+      <div class="checklist-text">
+        <div class="checklist-title">📝 แบบ ภ.ง.ด.90 ที่ยื่นแล้ว</div>
+        <div class="checklist-desc">พิมพ์จากระบบ e-Filing หรือ Revenue Department — กำหนดยื่น 31 มี.ค. {{ tax_year + 1 }}</div>
+      </div>
+    </label>
+    <label class="checklist-item" onclick="toggleCheck(this)">
+      <input type="checkbox" data-id="doc5">
+      <div class="checklist-text">
+        <div class="checklist-title">🛡️ ใบเสร็จประกันสังคม มาตรา 40 (ถ้ามี)</div>
+        <div class="checklist-desc">ใช้ลดหย่อนภาษีได้สูงสุด 9,000 บาท/ปี</div>
+      </div>
+    </label>
+    <label class="checklist-item" onclick="toggleCheck(this)">
+      <input type="checkbox" data-id="doc6">
+      <div class="checklist-text">
+        <div class="checklist-title">📄 ใบเสร็จประกันชีวิต / SSF / RMF (ถ้ามี)</div>
+        <div class="checklist-desc">เอกสารลดหย่อนจากบริษัทประกัน / กองทุน</div>
+      </div>
+    </label>
+    <label class="checklist-item" onclick="toggleCheck(this)">
+      <input type="checkbox" data-id="doc7">
+      <div class="checklist-text">
+        <div class="checklist-title">✅ ตรวจยอดรายได้ตรงกับ Bank Statement แล้ว</div>
+        <div class="checklist-desc">ยอดโอนใน Statement ต้องตรงกับสมุดรายรับ — ต่างกันต้องมีคำอธิบาย</div>
+      </div>
+    </label>
+  </div>
+</div>
+
+<!-- Important Note -->
+<div class="alert-banner" style="margin-top: 24px;">
+  <span class="alert-icon">⚠️</span>
+  <div class="alert-text">
+    <strong>หมายเหตุ:</strong> ข้อมูลนี้เป็นแนวทางทั่วไป ไม่ใช่คำปรึกษาทางภาษีอย่างเป็นทางการ
+    กรุณาปรึกษานักบัญชีหรือสรรพากรโดยตรงก่อนยื่นจริง
+    ยื่นแบบออนไลน์ได้ที่ <a href="https://efiling.rd.go.th" target="_blank">efiling.rd.go.th</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Year selector auto-submit
+document.getElementById('taxYearSelect').addEventListener('change', function() {
+  document.getElementById('taxForm').submit();
+});
+
+// Extra deductions apply
+function applyExtra() {
+  const val = parseFloat(document.getElementById('extraInput').value) || 0;
+  document.getElementById('extraDeductionsInput').value = val;
+  document.getElementById('taxForm').submit();
+}
+
+// Checklist with localStorage persistence
+const STORAGE_KEY = 'tutorpay_checklist_{{ tax_year }}';
+const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+
+document.querySelectorAll('.checklist-item input[type="checkbox"]').forEach(cb => {
+  if (saved[cb.dataset.id]) {
+    cb.checked = true;
+    cb.closest('.checklist-item').classList.add('checked');
+  }
+});
+updateCount();
+
+function toggleCheck(el) {
+  const cb = el.querySelector('input[type="checkbox"]');
+  setTimeout(() => {
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    state[cb.dataset.id] = cb.checked;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    el.classList.toggle('checked', cb.checked);
+    updateCount();
+  }, 0);
+}
+
+function updateCount() {
+  const total = document.querySelectorAll('.checklist-item input').length;
+  const checked = document.querySelectorAll('.checklist-item input:checked').length;
+  const badge = document.getElementById('checkCount');
+  badge.textContent = `${checked} / ${total}`;
+  badge.className = checked === total ? 'badge badge-completed' : 'badge badge-active';
+}
+</script>
+{% endblock %}
