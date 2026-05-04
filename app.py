@@ -1068,8 +1068,8 @@ def tax_summary_page():
         m = c.payment_date.month if c.payment_date else 1
         monthly_income[m] += c.price_per_course
 
-    # Tax calculation — Section 40(8) flat 60% expense deduction
-    expense_deduction = total_income * 0.60
+    # Tax calculation — Section 40(2) 50% expense deduction (Max 100,000 THB)
+    expense_deduction = min(total_income * 0.50, 100_000.0)
     personal_deduction = 60_000.0
     total_deductions = expense_deduction + personal_deduction + extra_deductions
     net_income = max(0.0, total_income - total_deductions)

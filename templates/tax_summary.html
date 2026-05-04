@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-header">
   <h2>🧾 สรุปภาษีประจำปี</h2>
-  <p>คำนวณภาษีเงินได้บุคคลธรรมดา มาตรา 40(8) และจัดการเอกสารสำหรับยื่น ภ.ง.ด.90</p>
+  <p>คำนวณภาษีเงินได้บุคคลธรรมดา มาตรา 40(2) และจัดการเอกสารสำหรับยื่น ภ.ง.ด.90</p>
 </div>
 
 <!-- Year Selector -->
@@ -54,7 +54,7 @@
   <!-- Tax Calculation -->
   <div class="card">
     <div class="card-header">
-      <h3>🧮 คำนวณภาษี (มาตรา 40(8))</h3>
+      <h3>🧮 คำนวณภาษี (มาตรา 40(2))</h3>
     </div>
     <div class="tax-calc-box">
       <div class="tax-calc-row">
@@ -62,7 +62,7 @@
         <span class="tax-calc-value">฿{{ "{:,.0f}".format(total_income) }}</span>
       </div>
       <div class="tax-calc-row">
-        <span class="tax-calc-label">หัก ค่าใช้จ่ายเหมา 60%</span>
+        <span class="tax-calc-label">หัก ค่าใช้จ่ายเหมา 50% (สูงสุด 100,000)</span>
         <span class="tax-calc-value tax-calc-deduct">- ฿{{ "{:,.0f}".format(expense_deduction) }}</span>
       </div>
       <div class="tax-calc-row">
