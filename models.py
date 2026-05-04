@@ -59,6 +59,7 @@ class Course(db.Model):
     payment_method = db.Column(db.String(50), default='โอนธนาคาร')
     transfer_ref = db.Column(db.String(100), default='')
     payment_date = db.Column(db.Date, nullable=True)   # วันที่รับเงิน (กำหนดเองได้)
+    expiry_date = db.Column(db.Date, nullable=True)    # วันหมดอายุคอร์ส
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # relationships
@@ -86,6 +87,7 @@ class CourseSession(db.Model):
     session_time = db.Column(db.String(10), default='')
     topic = db.Column(db.String(500), default='')
     issues = db.Column(db.String(500), default='')
+    status = db.Column(db.String(20), default='present') # 'present' or 'late_cancel'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 

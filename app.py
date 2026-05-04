@@ -100,6 +100,18 @@ with app.app_context():
             "UPDATE courses SET payment_date = date(created_at) WHERE payment_date IS NULL"
         ))
         db.session.commit()
+    if 'expiry_date' not in course_cols_all:
+        db.session.execute(sqlalchemy.text(
+            "ALTER TABLE courses ADD COLUMN expiry_date DATE"
+        ))
+        db.session.commit()
+
+    session_cols_all = [c['name'] for c in inspector.get_columns('course_sessions')]
+    if 'status' not in session_cols_all:
+        db.session.execute(sqlalchemy.text(
+            "ALTER TABLE course_sessions ADD COLUMN status VARCHAR(20) DEFAULT 'present'"
+        ))
+        db.session.commit()
 
 
 # ============================================================
@@ -469,7 +481,7 @@ def student_courses(student_id):
         student=student,
         courses=courses,
         duration_map=duration_map,
-        today=date.today().isoformat(),
+        today_date=date.today(),
     )
 
 
@@ -487,16 +499,24 @@ def add_course(student_id):
     payment_method = request.form.get('payment_method', 'โอนธนาคาร').strip()
     transfer_ref = request.form.get('transfer_ref', '').strip()
     payment_date_str = request.form.get('payment_date', '').strip()
+    expiry_date_str = request.form.get('expiry_date', '').strip()
 
     if not course_name or not total_sessions or price_per_course is None:
         flash('กรุณากรอกข้อมูลให้ครบ', 'error')
         return redirect(url_for('student_courses', student_id=student_id))
 
-    # Parse payment_date — fallback to today
+    # Parse dates
     try:
         payment_date = datetime.strptime(payment_date_str, '%Y-%m-%d').date() if payment_date_str else date.today()
     except ValueError:
         payment_date = date.today()
+        
+    expiry_date = None
+    if expiry_date_str:
+        try:
+            expiry_date = datetime.strptime(expiry_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            pass
 
     course = Course(
         student_id=student_id,
@@ -506,6 +526,7 @@ def add_course(student_id):
         payment_method=payment_method,
         transfer_ref=transfer_ref,
         payment_date=payment_date,
+        expiry_date=expiry_date,
     )
     db.session.add(course)
     db.session.commit()
@@ -527,6 +548,7 @@ def edit_course(course_id):
     payment_method = request.form.get('payment_method', 'โอนธนาคาร').strip()
     transfer_ref = request.form.get('transfer_ref', '').strip()
     payment_date_str = request.form.get('payment_date', '').strip()
+    expiry_date_str = request.form.get('expiry_date', '').strip()
 
     if not course_name or not total_sessions or price_per_course is None:
         flash('กรุณากรอกข้อมูลให้ครบ', 'error')
@@ -541,12 +563,20 @@ def edit_course(course_id):
     except ValueError:
         payment_date = course.payment_date
 
+    expiry_date = None
+    if expiry_date_str:
+        try:
+            expiry_date = datetime.strptime(expiry_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
     course.course_name = course_name
     course.total_sessions = total_sessions
     course.price_per_course = price_per_course
     course.payment_method = payment_method
     course.transfer_ref = transfer_ref
     course.payment_date = payment_date
+    course.expiry_date = expiry_date
     # Re-evaluate completion status
     course.is_completed = course.completed_sessions >= course.total_sessions
     db.session.commit()
@@ -584,6 +614,7 @@ def course_detail(course_id):
         course=course,
         sessions=sessions,
         today=date.today().isoformat(),
+        today_date=date.today(),
     )
 
 
@@ -603,6 +634,8 @@ def record_session(course_id):
 
     # Create session record
     session_date_str = request.form.get('session_date', '')
+    is_late_cancel = request.form.get('is_late_cancel') == 'yes'
+    
     session_record = CourseSession(
         course_id=course_id,
         session_number=course.completed_sessions,
@@ -610,6 +643,7 @@ def record_session(course_id):
         session_time=request.form.get('session_time', '').strip(),
         topic=request.form.get('topic', '').strip(),
         issues=request.form.get('issues', '').strip(),
+        status='late_cancel' if is_late_cancel else 'present'
     )
     db.session.add(session_record)
 
@@ -619,7 +653,10 @@ def record_session(course_id):
     elif course.remaining_sessions <= 2:
         flash(f'📢 เหลืออีก {course.remaining_sessions} ครั้งก็จะจบคอร์ส!', 'warning')
     else:
-        flash(f'บันทึกเรียนครั้งที่ {course.completed_sessions} เรียบร้อย', 'success')
+        if is_late_cancel:
+            flash(f'บันทึกลาล่าช้า/ขาดเรียน (ถูกหัก 1 ครั้ง)', 'warning')
+        else:
+            flash(f'บันทึกเรียนครั้งที่ {course.completed_sessions} เรียบร้อย', 'success')
 
     db.session.commit()
     return redirect(url_for('course_detail', course_id=course_id))

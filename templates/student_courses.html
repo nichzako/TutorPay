@@ -80,10 +80,18 @@
           <td>
             {% if course.is_completed %}
               <span class="badge badge-completed">✅ จบแล้ว</span>
+            {% elif course.expiry_date and course.expiry_date < today_date %}
+              <span class="badge" style="background:#fef2f2; color:#ef4444; border:1px solid #fecaca;">🚨 หมดอายุ</span>
             {% elif course.remaining_sessions <= 2 %}
               <span class="badge badge-alert">⚠️ ใกล้จบ</span>
             {% else %}
               <span class="badge badge-active">🟢 กำลังเรียน</span>
+            {% endif %}
+            
+            {% if course.expiry_date and not course.is_completed %}
+              <div style="font-size:0.75rem; margin-top:4px; color: {% if course.expiry_date < today_date %}#ef4444{% else %}var(--text-muted){% endif %};">
+                หมดอายุ: {{ course.expiry_date.strftime('%d/%m/%Y') }}
+              </div>
             {% endif %}
           </td>
           <td style="min-width:130px; font-size:0.85rem;">
@@ -117,9 +125,10 @@
                 '{{ course.course_name | replace("'", "\\'") }}',
                 {{ course.total_sessions }},
                 {{ course.price_per_course }},
-                '{{ course.payment_date.isoformat() if course.payment_date else today }}',
+                '{{ course.payment_date.isoformat() if course.payment_date else today_date.isoformat() }}',
                 '{{ course.payment_method or "โอนธนาคาร" }}',
-                '{{ course.transfer_ref or "" }}'
+                '{{ course.transfer_ref or "" }}',
+                '{{ course.expiry_date.isoformat() if course.expiry_date else "" }}'
               )">✏️</button>
               <form method="POST" action="{{ url_for('delete_course', course_id=course.id) }}" style="display:inline" onsubmit="return confirm('ลบคอร์ส {{ course.course_name }}?')">
                 <button type="submit" class="btn-icon">🗑️</button>
@@ -163,9 +172,15 @@
           <input type="number" name="price_per_course" class="form-control" min="0" step="100" placeholder="5000" required>
         </div>
       </div>
-      <div class="form-group">
-        <label>📅 วันที่รับเงิน *</label>
-        <input type="date" name="payment_date" id="coursePaymentDate" class="form-control" required>
+      <div class="form-row">
+        <div class="form-group">
+          <label>📅 วันที่รับเงิน *</label>
+          <input type="date" name="payment_date" id="coursePaymentDate" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label>⏳ วันหมดอายุคอร์ส</label>
+          <input type="date" name="expiry_date" id="courseExpiryDate" class="form-control">
+        </div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="closeModal('addCourseModal')">ยกเลิก</button>
@@ -194,9 +209,15 @@
           <input type="number" name="price_per_course" id="editPrice" class="form-control" min="0" step="100" required>
         </div>
       </div>
-      <div class="form-group">
-        <label>📅 วันที่รับเงิน</label>
-        <input type="date" name="payment_date" id="editPaymentDate" class="form-control">
+      <div class="form-row">
+        <div class="form-group">
+          <label>📅 วันที่รับเงิน</label>
+          <input type="date" name="payment_date" id="editPaymentDate" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>⏳ วันหมดอายุคอร์ส</label>
+          <input type="date" name="expiry_date" id="editExpiryDate" class="form-control">
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -239,12 +260,13 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
 });
 
-function openEditModal(courseId, courseName, totalSessions, price, paymentDate, paymentMethod, transferRef) {
+function openEditModal(courseId, courseName, totalSessions, price, paymentDate, paymentMethod, transferRef, expiryDate) {
   document.getElementById('editCourseForm').action = `/courses/${courseId}/edit`;
   document.getElementById('editCourseName').value = courseName;
   document.getElementById('editTotalSessions').value = totalSessions;
   document.getElementById('editPrice').value = price;
   document.getElementById('editPaymentDate').value = paymentDate;
+  document.getElementById('editExpiryDate').value = expiryDate;
   document.getElementById('editTransferRef').value = transferRef;
   const pmSelect = document.getElementById('editPaymentMethod');
   for (let opt of pmSelect.options) {
@@ -252,5 +274,19 @@ function openEditModal(courseId, courseName, totalSessions, price, paymentDate, 
   }
   document.getElementById('editCourseModal').classList.add('active');
 }
+
+// Auto-calculate expiry date (4 sessions/month + 1 month buffer)
+function autoCalcExpiry() {
+  const sessions = parseInt(document.querySelector('input[name="total_sessions"]').value) || 0;
+  const payDateStr = document.getElementById('coursePaymentDate').value;
+  if (sessions > 0 && payDateStr) {
+    const payDate = new Date(payDateStr);
+    const months = (sessions / 4) + 1; // expected + 1 month buffer
+    payDate.setMonth(payDate.getMonth() + months);
+    document.getElementById('courseExpiryDate').value = payDate.toISOString().split('T')[0];
+  }
+}
+document.querySelector('input[name="total_sessions"]').addEventListener('input', autoCalcExpiry);
+document.getElementById('coursePaymentDate').addEventListener('input', autoCalcExpiry);
 </script>
 {% endblock %}

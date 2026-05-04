@@ -14,6 +14,13 @@
     <strong>คอร์สนี้เรียนครบแล้ว!</strong> {{ course.student.name }} เรียนครบ {{ course.total_sessions }} ครั้งเรียบร้อยแล้ว
   </div>
 </div>
+{% elif course.expiry_date and course.expiry_date < today_date %}
+<div class="alert-banner" style="border-color: #fecaca; background: #fef2f2;">
+  <span class="alert-icon">🚨</span>
+  <div class="alert-text">
+    <strong style="color: #ef4444;">คอร์สนี้หมดอายุแล้ว!</strong> (เมื่อ {{ course.expiry_date.strftime('%d/%m/%Y') }}) คุณยังสามารถบันทึกการเรียนต่อได้เพื่อความยืดหยุ่น
+  </div>
+</div>
 {% elif course.remaining_sessions <= 2 %}
 <div class="alert-banner" style="border-color: rgba(59, 130, 246, 0.3); background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(124, 58, 237, 0.08));">
   <span class="alert-icon">📢</span>
@@ -51,8 +58,8 @@
 <div class="card course-progress-card">
   <div class="card-header">
     <h3>📊 ความคืบหน้า</h3>
-    <span class="badge {% if course.is_completed %}badge-completed{% elif course.remaining_sessions <= 2 %}badge-alert{% else %}badge-active{% endif %}">
-      {% if course.is_completed %}✅ จบแล้ว{% elif course.remaining_sessions <= 2 %}⚠️ ใกล้จบ{% else %}🟢 กำลังเรียน{% endif %}
+    <span class="badge {% if course.is_completed %}badge-completed{% elif course.expiry_date and course.expiry_date < today_date %}badge-alert{% elif course.remaining_sessions <= 2 %}badge-alert{% else %}badge-active{% endif %}">
+      {% if course.is_completed %}✅ จบแล้ว{% elif course.expiry_date and course.expiry_date < today_date %}🚨 หมดอายุ{% elif course.remaining_sessions <= 2 %}⚠️ ใกล้จบ{% else %}🟢 กำลังเรียน{% endif %}
     </span>
   </div>
 
@@ -121,10 +128,15 @@
         {% for s in sessions %}
         <tr>
           <td style="font-weight: 700; color: var(--accent-purple-light);">{{ s.session_number }}</td>
-          <td>{{ s.session_date.strftime('%d/%m/%Y') }}</td>
-          <td>{{ s.session_time or '—' }}</td>
-          <td>{{ s.topic or '—' }}</td>
-          <td class="text-muted">{{ s.issues or '—' }}</td>
+          <td>
+            {{ s.session_date.strftime('%d/%m/%Y') }}
+            {% if s.status == 'late_cancel' %}
+              <div style="margin-top:4px;"><span class="badge" style="background:#fef2f2; color:#ef4444; border:1px solid #fecaca; font-size:0.7rem; padding:2px 6px;">ลาล่าช้า/ขาดเรียน</span></div>
+            {% endif %}
+          </td>
+          <td {% if s.status == 'late_cancel' %}style="text-decoration: line-through; opacity:0.5;"{% endif %}>{{ s.session_time or '—' }}</td>
+          <td {% if s.status == 'late_cancel' %}style="text-decoration: line-through; opacity:0.5;"{% endif %}>{{ s.topic or '—' }}</td>
+          <td class="text-muted" {% if s.status == 'late_cancel' %}style="text-decoration: line-through; opacity:0.5;"{% endif %}>{{ s.issues or '—' }}</td>
           <td>
             <form method="POST" action="{{ url_for('delete_session', session_id=s.id) }}" onsubmit="return confirm('ลบบันทึกครั้งที่ {{ s.session_number }}?')">
               <button type="submit" class="btn-icon" title="ลบ">🗑️</button>
@@ -178,6 +190,13 @@
       <div class="form-group">
         <label>⚠️ ปัญหา/ข้อติดขัด</label>
         <input type="text" name="issues" class="form-control" placeholder="เช่น ยังไม่เข้าใจเรื่อง...">
+      </div>
+      <div class="form-group" style="background: #fef2f2; border: 1px solid #fecaca; padding: 12px; border-radius: 8px; margin-top: 8px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #b91c1c; font-weight: 600; margin: 0;">
+          <input type="checkbox" name="is_late_cancel" value="yes" style="width: 18px; height: 18px; accent-color: #ef4444;">
+          🚨 นักเรียนลาล่าช้า/ขาดเรียน (ถูกตัดสิทธิ์ 1 ครั้ง)
+        </label>
+        <p style="margin: 4px 0 0 26px; font-size: 0.8rem; color: #dc2626;">จำนวนครั้งจะถูกหัก แต่จะแสดงในประวัติว่าขาดเรียน</p>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="closeModal('recordSessionModal')">ยกเลิก</button>
