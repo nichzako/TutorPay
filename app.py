@@ -268,6 +268,50 @@ def my_student_ids():
     return [s.id for s in my_students().all()]
 
 
+SESSIONS_PER_MONTH = 4  # อัตรามาตรฐาน 4 ครั้ง/เดือน
+
+
+def calc_course_duration(course):
+    """คำนวณระยะเวลาจริง vs คาด และ opportunity cost"""
+    if not course.payment_date:
+        return None
+    start = course.payment_date
+    end = date.today() if not course.is_completed else None
+
+    # หาวันสุดท้ายจาก session ถ้ามี
+    if course.sessions:
+        sessions_sorted = sorted(course.sessions, key=lambda s: s.session_date)
+        last_session_date = sessions_sorted[-1].session_date
+        if course.is_completed:
+            end = last_session_date
+        else:
+            # ยังไม่จบ → ใช้ today แต่เทียบกับ last session ด้วย
+            end = date.today()
+    elif not course.is_completed:
+        end = date.today()
+    else:
+        end = start  # completed but no sessions recorded
+
+    actual_days = max(0, (end - start).days)
+    actual_months = round(actual_days / 30, 1)
+    expected_months = round(course.total_sessions / SESSIONS_PER_MONTH, 1)
+    delay_months = round(actual_months - expected_months, 1)
+    rate_per_month = course.price_per_course / expected_months if expected_months > 0 else 0
+    opp_cost = round(max(0.0, delay_months) * rate_per_month)
+
+    return {
+        'start': start,
+        'end': end,
+        'actual_months': actual_months,
+        'expected_months': expected_months,
+        'delay_months': delay_months,
+        'rate_per_month': round(rate_per_month),
+        'opp_cost': opp_cost,
+        'is_on_time': delay_months <= 0,
+        'is_completed': course.is_completed,
+    }
+
+
 # ============================================================
 # Dashboard
 # ============================================================
@@ -331,17 +375,30 @@ def students_page():
     pf = parse_period_filters()
     date_from = pf['date_from']
     date_to = pf['date_to']
+    active_only = request.args.get('active_only', 0, type=int)
 
     sid_list = my_student_ids()
     students = my_students().order_by(Student.name).all()
 
+    # Filter active students: มีคอร์สที่ยังไม่จบ และ payment_date <= date_to
+    if active_only:
+        active_sids = {
+            c.student_id for c in Course.query.filter(
+                Course.student_id.in_(sid_list),
+                Course.payment_date <= date_to,
+                Course.is_completed == False,
+            ).all()
+        }
+        students = [s for s in students if s.id in active_sids]
+
     # Compute per-student income within the period
+    cur_sid_list = [s.id for s in students]
     filtered_lessons = HourlyLesson.query.filter(
-        HourlyLesson.student_id.in_(sid_list),
+        HourlyLesson.student_id.in_(cur_sid_list),
         HourlyLesson.date >= date_from, HourlyLesson.date <= date_to,
     ).all()
     filtered_courses = Course.query.filter(
-        Course.student_id.in_(sid_list),
+        Course.student_id.in_(cur_sid_list),
         Course.payment_date >= date_from,
         Course.payment_date <= date_to,
     ).all()
@@ -357,6 +414,7 @@ def students_page():
         filter_action=url_for('students_page'),
         students=students,
         student_income_map=student_income_map,
+        active_only=active_only,
     )
 
 
@@ -402,8 +460,17 @@ def student_courses(student_id):
     if student.user_id != current_user.id:
         flash('ไม่มีสิทธิ์เข้าถึงข้อมูลนี้', 'error')
         return redirect(url_for('students_page'))
-    courses = Course.query.filter_by(student_id=student_id).order_by(Course.created_at.desc()).all()
-    return render_template('student_courses.html', student=student, courses=courses)
+    courses = Course.query.filter_by(student_id=student_id).order_by(
+        Course.payment_date.desc(), Course.created_at.desc()
+    ).all()
+    # คำนวณ duration stats ต่อคอร์ส
+    duration_map = {c.id: calc_course_duration(c) for c in courses}
+    return render_template('student_courses.html',
+        student=student,
+        courses=courses,
+        duration_map=duration_map,
+        today=date.today().isoformat(),
+    )
 
 
 @app.route('/students/<int:student_id>/courses/add', methods=['POST'])
@@ -444,6 +511,47 @@ def add_course(student_id):
     db.session.commit()
     flash(f'เพิ่มคอร์ส "{course_name}" ให้ {student.name} เรียบร้อยแล้ว', 'success')
     return redirect(url_for('student_courses', student_id=student_id))
+
+
+@app.route('/courses/<int:course_id>/edit', methods=['POST'])
+@login_required
+def edit_course(course_id):
+    course = Course.query.get_or_404(course_id)
+    if course.student.user_id != current_user.id:
+        flash('ไม่มีสิทธิ์', 'error')
+        return redirect(url_for('students_page'))
+
+    course_name = request.form.get('course_name', '').strip()
+    total_sessions = request.form.get('total_sessions', type=int)
+    price_per_course = request.form.get('price_per_course', type=float)
+    payment_method = request.form.get('payment_method', 'โอนธนาคาร').strip()
+    transfer_ref = request.form.get('transfer_ref', '').strip()
+    payment_date_str = request.form.get('payment_date', '').strip()
+
+    if not course_name or not total_sessions or price_per_course is None:
+        flash('กรุณากรอกข้อมูลให้ครบ', 'error')
+        return redirect(url_for('student_courses', student_id=course.student_id))
+
+    if total_sessions < course.completed_sessions:
+        flash(f'จำนวนครั้งต้องไม่น้อยกว่าที่เรียนไปแล้ว ({course.completed_sessions} ครั้ง)', 'error')
+        return redirect(url_for('student_courses', student_id=course.student_id))
+
+    try:
+        payment_date = datetime.strptime(payment_date_str, '%Y-%m-%d').date() if payment_date_str else course.payment_date
+    except ValueError:
+        payment_date = course.payment_date
+
+    course.course_name = course_name
+    course.total_sessions = total_sessions
+    course.price_per_course = price_per_course
+    course.payment_method = payment_method
+    course.transfer_ref = transfer_ref
+    course.payment_date = payment_date
+    # Re-evaluate completion status
+    course.is_completed = course.completed_sessions >= course.total_sessions
+    db.session.commit()
+    flash(f'แก้ไขคอร์ส "{course_name}" เรียบร้อยแล้ว', 'success')
+    return redirect(url_for('student_courses', student_id=course.student_id))
 
 
 @app.route('/courses/<int:course_id>/delete', methods=['POST'])
@@ -812,6 +920,66 @@ def reports_page():
         total_expenses=total_expenses,
         net_profit=net_profit,
         transactions=transactions,
+    )
+
+
+# ============================================================
+# Course Analytics — Opportunity Cost Summary
+# ============================================================
+@app.route('/analytics/courses')
+@login_required
+def course_analytics():
+    today = date.today()
+    # ใช้ period filter แบบ year หรือ all
+    view = request.args.get('view', 'active')  # active | all
+    filter_year = request.args.get('year', 0, type=int)
+
+    sid_list = my_student_ids()
+
+    courses_q = Course.query.filter(Course.student_id.in_(sid_list))
+    if view == 'active':
+        courses_q = courses_q.filter(Course.is_completed == False)
+    elif view == 'completed':
+        courses_q = courses_q.filter(Course.is_completed == True)
+    if filter_year:
+        courses_q = courses_q.filter(
+            Course.payment_date >= date(filter_year, 1, 1),
+            Course.payment_date <= date(filter_year, 12, 31),
+        )
+
+    courses = courses_q.order_by(Course.payment_date.desc()).all()
+
+    # คำนวณ duration ทุกคอร์ส
+    analytics = []
+    total_opp_cost = 0
+    total_expected_months = 0
+    total_actual_months = 0
+    on_time_count = 0
+
+    for c in courses:
+        d = calc_course_duration(c)
+        if d:
+            total_opp_cost += d['opp_cost']
+            total_expected_months += d['expected_months']
+            total_actual_months += d['actual_months']
+            if d['is_on_time']:
+                on_time_count += 1
+        analytics.append({'course': c, 'duration': d})
+
+    available_years = list(range(2020, today.year + 2))
+
+    return render_template('course_analytics.html',
+        analytics=analytics,
+        view=view,
+        filter_year=filter_year,
+        available_years=available_years,
+        total_opp_cost=total_opp_cost,
+        total_expected_months=round(total_expected_months, 1),
+        total_actual_months=round(total_actual_months, 1),
+        on_time_count=on_time_count,
+        total_courses=len(analytics),
+        today=today,
+        sessions_per_month=SESSIONS_PER_MONTH,
     )
 
 

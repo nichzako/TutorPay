@@ -7,6 +7,37 @@
   <p>จัดการคอร์สเรียนทั้งหมดของ {{ student.name }}</p>
 </div>
 
+{# ===== Opportunity Cost Summary Card ===== #}
+{% set has_duration = duration_map.values() | selectattr('opp_cost', 'defined') | list %}
+{% if courses %}
+{% set total_opp = namespace(val=0) %}
+{% set delayed_count = namespace(val=0) %}
+{% for course in courses %}
+  {% set d = duration_map.get(course.id) %}
+  {% if d %}
+    {% set total_opp.val = total_opp.val + d.opp_cost %}
+    {% if not d.is_on_time %}{% set delayed_count.val = delayed_count.val + 1 %}{% endif %}
+  {% endif %}
+{% endfor %}
+{% if total_opp.val > 0 %}
+<div class="card" style="border-left: 4px solid var(--accent-amber, #f59e0b); margin-bottom:16px;">
+  <div style="padding:16px 20px; display:flex; gap:32px; flex-wrap:wrap; align-items:center;">
+    <div>
+      <div style="font-size:0.8rem; color:var(--text-muted);">⏳ ค่าเสียโอกาสสะสม</div>
+      <div style="font-size:1.5rem; font-weight:700; color:#f59e0b;">฿{{ "{:,.0f}".format(total_opp.val) }}</div>
+    </div>
+    <div>
+      <div style="font-size:0.8rem; color:var(--text-muted);">คอร์สที่ล่าช้า</div>
+      <div style="font-size:1.5rem; font-weight:700; color:var(--accent-red, #ef4444);">{{ delayed_count.val }} / {{ courses|length }}</div>
+    </div>
+    <div style="margin-left:auto;">
+      <a href="{{ url_for('course_analytics') }}?view=all" class="btn btn-ghost btn-sm">📊 ดู Analytics ทั้งหมด →</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
 <div class="card">
   <div class="card-header">
     <h3>คอร์สทั้งหมด ({{ courses|length }})</h3>
@@ -21,17 +52,23 @@
           <th>ชื่อคอร์ส</th>
           <th>ความคืบหน้า</th>
           <th>สถานะ</th>
+          <th>ระยะเวลา</th>
+          <th>ค่าเสียโอกาส</th>
           <th class="text-right">ราคา</th>
           <th>จัดการ</th>
         </tr>
       </thead>
       <tbody>
         {% for course in courses %}
+        {% set d = duration_map.get(course.id) %}
         <tr>
           <td style="font-weight: 600;">
             <a href="{{ url_for('course_detail', course_id=course.id) }}" style="color: var(--accent-purple-light); text-decoration: none;">{{ course.course_name }}</a>
+            {% if course.payment_date %}
+            <div style="font-size:0.75rem; color:var(--text-muted);">📅 {{ course.payment_date.strftime('%d/%m/%Y') }}</div>
+            {% endif %}
           </td>
-          <td style="min-width: 200px;">
+          <td style="min-width: 160px;">
             <div class="progress-bar">
               <div class="progress-fill" style="width: {{ course.progress_percent }}%"></div>
             </div>
@@ -49,10 +86,41 @@
               <span class="badge badge-active">🟢 กำลังเรียน</span>
             {% endif %}
           </td>
+          <td style="min-width:130px; font-size:0.85rem;">
+            {% if d %}
+              <div>จริง: <strong>{{ d.actual_months }} เดือน</strong></div>
+              <div style="color:var(--text-muted);">คาด: {{ d.expected_months }} เดือน</div>
+              {% if not d.is_on_time %}
+                <div style="color:#f59e0b;">⏳ เกิน {{ d.delay_months }} เดือน</div>
+              {% else %}
+                <div style="color:var(--accent-green);">✅ ทันกำหนด</div>
+              {% endif %}
+            {% else %}
+              <span style="color:var(--text-muted);">—</span>
+            {% endif %}
+          </td>
+          <td style="font-size:0.85rem;">
+            {% if d and d.opp_cost > 0 %}
+              <span style="color:#f59e0b; font-weight:600;">฿{{ "{:,.0f}".format(d.opp_cost) }}</span>
+            {% elif d and d.is_on_time %}
+              <span style="color:var(--accent-green);">฿0</span>
+            {% else %}
+              <span style="color:var(--text-muted);">—</span>
+            {% endif %}
+          </td>
           <td class="text-right amount">฿{{ "{:,.0f}".format(course.price_per_course) }}</td>
           <td>
             <div class="flex gap-2">
-              <a href="{{ url_for('course_detail', course_id=course.id) }}" class="btn btn-sm btn-ghost">📋 รายละเอียด</a>
+              <a href="{{ url_for('course_detail', course_id=course.id) }}" class="btn btn-sm btn-ghost">📋</a>
+              <button class="btn btn-sm btn-ghost" onclick="openEditModal(
+                {{ course.id }},
+                '{{ course.course_name | replace("'", "\\'") }}',
+                {{ course.total_sessions }},
+                {{ course.price_per_course }},
+                '{{ course.payment_date.isoformat() if course.payment_date else today }}',
+                '{{ course.payment_method or "โอนธนาคาร" }}',
+                '{{ course.transfer_ref or "" }}'
+              )">✏️</button>
               <form method="POST" action="{{ url_for('delete_course', course_id=course.id) }}" style="display:inline" onsubmit="return confirm('ลบคอร์ส {{ course.course_name }}?')">
                 <button type="submit" class="btn-icon">🗑️</button>
               </form>
@@ -107,13 +175,58 @@
   </div>
 </div>
 
+<!-- Edit Course Modal -->
+<div class="modal-overlay" id="editCourseModal">
+  <div class="modal">
+    <h3>✏️ แก้ไขคอร์ส</h3>
+    <form method="POST" id="editCourseForm" action="">
+      <div class="form-group">
+        <label>ชื่อคอร์ส *</label>
+        <input type="text" name="course_name" id="editCourseName" class="form-control" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>จำนวนครั้งทั้งหมด *</label>
+          <input type="number" name="total_sessions" id="editTotalSessions" class="form-control" min="1" required>
+        </div>
+        <div class="form-group">
+          <label>ราคาคอร์ส (บาท) *</label>
+          <input type="number" name="price_per_course" id="editPrice" class="form-control" min="0" step="100" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>📅 วันที่รับเงิน</label>
+        <input type="date" name="payment_date" id="editPaymentDate" class="form-control">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>ช่องทางรับเงิน</label>
+          <select name="payment_method" id="editPaymentMethod" class="form-control">
+            <option value="โอนธนาคาร">โอนธนาคาร</option>
+            <option value="เงินสด">เงินสด</option>
+            <option value="พร้อมเพย์">พร้อมเพย์</option>
+            <option value="อื่นๆ">อื่นๆ</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>เลขอ้างอิง/สลิป</label>
+          <input type="text" name="transfer_ref" id="editTransferRef" class="form-control" placeholder="เลขอ้างอิง">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('editCourseModal')">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary">💾 บันทึกการแก้ไข</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
 function openModal(id) {
   document.getElementById(id).classList.add('active');
-  // Default วันที่รับเงินเป็นวันนี้เมื่อเปิด modal
   if (id === 'addCourseModal') {
     const dateInput = document.getElementById('coursePaymentDate');
     if (dateInput && !dateInput.value) {
@@ -125,5 +238,19 @@ function closeModal(id) { document.getElementById(id).classList.remove('active')
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
 });
+
+function openEditModal(courseId, courseName, totalSessions, price, paymentDate, paymentMethod, transferRef) {
+  document.getElementById('editCourseForm').action = `/courses/${courseId}/edit`;
+  document.getElementById('editCourseName').value = courseName;
+  document.getElementById('editTotalSessions').value = totalSessions;
+  document.getElementById('editPrice').value = price;
+  document.getElementById('editPaymentDate').value = paymentDate;
+  document.getElementById('editTransferRef').value = transferRef;
+  const pmSelect = document.getElementById('editPaymentMethod');
+  for (let opt of pmSelect.options) {
+    opt.selected = opt.value === paymentMethod;
+  }
+  document.getElementById('editCourseModal').classList.add('active');
+}
 </script>
 {% endblock %}

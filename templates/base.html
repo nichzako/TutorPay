@@ -34,6 +34,9 @@
         <a href="{{ url_for('reports_page') }}" class="{% if request.endpoint == 'reports_page' %}active{% endif %}">
           <span class="nav-icon">📋</span> รายงาน
         </a>
+        <a href="{{ url_for('course_analytics') }}" class="{% if request.endpoint == 'course_analytics' %}active{% endif %}">
+          <span class="nav-icon">📈</span> วิเคราะห์คอร์ส
+        </a>
         <a href="{{ url_for('tax_summary_page') }}" class="{% if request.endpoint == 'tax_summary_page' %}active{% endif %}">
           <span class="nav-icon">🧾</span> ภาษี
         </a>

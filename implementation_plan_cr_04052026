@@ -1,0 +1,171 @@
+# Change Request: Course Analytics & Edit Features
+
+## Overview
+เพิ่ม 3 ฟีเจอร์ใหม่ในหน้าจัดการนักเรียนและคอร์ส เพื่อวิเคราะห์ประสิทธิภาพการสอน และบริหารข้อมูลได้สะดวกยิ่งขึ้น
+
+---
+
+## Feature 1 — กรองนักเรียน Active ณ เดือนนั้น
+
+**ปัญหา:** หน้า Students ปัจจุบันแสดงนักเรียนทุกคน ไม่ว่าคอร์สจะจบไปแล้วหรือยัง
+
+**คำนิยาม "Active ณ เดือน X":**  
+นักเรียนที่มีคอร์สซึ่ง `payment_date <= date_to` **และ** ยังไม่จบ (`is_completed = False`)  
+หรือจบแล้วแต่เพิ่งจบในช่วงเดือนนั้น (session สุดท้ายอยู่ใน `date_from..date_to`)
+
+**การแก้ไข:**
+- เพิ่ม toggle button **"Active เท่านั้น"** ในหน้า Students
+- เพิ่ม query parameter `active_only=1`
+- Filter ใน `students_page()` route เพื่อตัดนักเรียนที่ไม่มีคอร์ส active ออก
+
+### [MODIFY] `app.py` — `students_page()`
+```python
+# เพิ่ม logic กรอง active students
+active_only = request.args.get('active_only', 0, type=int)
+if active_only:
+    # เก็บเฉพาะนักเรียนที่มีคอร์สที่ payment_date <= date_to และยังไม่จบ
+    active_student_ids = {
+        c.student_id for c in Course.query.filter(
+            Course.student_id.in_(sid_list),
+            Course.payment_date <= date_to,
+            Course.is_completed == False,
+        ).all()
+    }
+    students = [s for s in students if s.id in active_student_ids]
+```
+
+### [MODIFY] `templates/students.html`
+เพิ่มปุ่ม toggle ใต้ period filter:
+```html
+<div class="filter-row">
+  <a href="?...&active_only=1" class="btn btn-sm {{ 'btn-primary' if active_only else 'btn-ghost' }}">
+    🟢 Active เท่านั้น
+  </a>
+  <a href="?..." class="btn btn-sm {{ 'btn-primary' if not active_only else 'btn-ghost' }}">
+    👥 ทั้งหมด
+  </a>
+</div>
+```
+
+---
+
+## Feature 2 — เปรียบเทียบระยะเวลาเรียนจริง vs คาด (Opportunity Cost)
+
+**หลัก:** อัตราการสอนมาตรฐาน = **4 ครั้ง/เดือน**
+
+| จำนวนครั้ง | ระยะเวลาคาด | สูตร |
+|---|---|---|
+| 8 ครั้ง | 2.0 เดือน | sessions ÷ 4 |
+| 10 ครั้ง | 2.5 เดือน | sessions ÷ 4 |
+| 12 ครั้ง | 3.0 เดือน | sessions ÷ 4 |
+| N ครั้ง | N÷4 เดือน | — |
+
+**การคำนวณ:**
+- **Expected duration** = `total_sessions / 4` เดือน
+- **Actual duration** = วันที่ session แรก → วันที่ session สุดท้าย (ถ้าจบแล้ว) หรือ → วันนี้ (ถ้ายังไม่จบ)
+- **Delay** = Actual - Expected (เดือน)
+- **Rate/month** = `price_per_course / expected_months`
+- **Opportunity cost** = `delay_months × rate_per_month` (รายได้ที่เสียไปจากล่าช้า)
+
+**แสดงผลใน `student_courses.html`:**  
+เพิ่มคอลัมน์ "ระยะเวลา" ในตาราง และการ์ด summary ด้านบน
+
+### [MODIFY] `app.py` — `student_courses()` route
+คำนวณ duration stats ส่งไป template:
+```python
+def calc_course_duration(course):
+    sessions = sorted(course.sessions, key=lambda s: s.session_date)
+    if not sessions:
+        return None
+    start = sessions[0].session_date
+    end = sessions[-1].session_date if course.is_completed else date.today()
+    actual_days = (end - start).days
+    actual_months = actual_days / 30
+    expected_months = course.total_sessions / 4
+    delay_months = actual_months - expected_months
+    rate_per_month = course.price_per_course / expected_months
+    opp_cost = max(0, delay_months) * rate_per_month
+    return {
+        'start': start, 'end': end,
+        'actual_months': round(actual_months, 1),
+        'expected_months': round(expected_months, 1),
+        'delay_months': round(delay_months, 1),
+        'opp_cost': round(opp_cost),
+        'is_on_time': delay_months <= 0,
+    }
+```
+
+---
+
+## Feature 3 — แก้ไขรายละเอียดคอร์ส
+
+**ฟิลด์ที่แก้ไขได้:**
+- ชื่อคอร์ส
+- จำนวนครั้งทั้งหมด
+- ราคา
+- วันที่รับเงิน
+- ช่องทางรับเงิน
+- เลขอ้างอิง/สลิป
+
+**Implementation:**
+- เพิ่ม route `POST /courses/<id>/edit`
+- เพิ่มปุ่ม ✏️ ในตาราง → เปิด edit modal พร้อม pre-fill ข้อมูล
+- ใช้ JavaScript populate modal จาก data attributes
+
+### [MODIFY] `app.py` — เพิ่ม route `edit_course`
+```python
+@app.route('/courses/<int:course_id>/edit', methods=['POST'])
+@login_required
+def edit_course(course_id):
+    course = Course.query.get_or_404(course_id)
+    if course.student.user_id != current_user.id:
+        flash('ไม่มีสิทธิ์', 'error')
+        ...
+    course.course_name = request.form.get('course_name', '').strip()
+    course.total_sessions = request.form.get('total_sessions', type=int)
+    course.price_per_course = request.form.get('price_per_course', type=float)
+    # ... etc
+    db.session.commit()
+```
+
+### [MODIFY] `templates/student_courses.html`
+เพิ่มปุ่ม ✏️ ในตาราง + Edit modal ที่ populate ด้วย JS
+
+---
+
+## Proposed Changes Summary
+
+### [MODIFY] `app.py`
+- `students_page()`: เพิ่ม `active_only` filter logic
+- `student_courses()`: เพิ่ม duration stats calculation
+- เพิ่ม route `edit_course()`
+
+### [MODIFY] `templates/students.html`
+- เพิ่ม Active toggle button
+
+### [MODIFY] `templates/student_courses.html`
+- เพิ่มคอลัมน์ระยะเวลาในตาราง
+- เพิ่ม Duration Summary card
+- เพิ่มปุ่ม ✏️ + Edit modal
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Feature 1 — นิยาม Active:**  
+> ถ้านักเรียนมี 2 คอร์ส คอร์สนึงจบแล้ว อีกคอร์สยังเรียน → ยัง Active ใช่ไหมครับ?
+
+> [!IMPORTANT]
+> **Feature 2 — จุดเริ่ม Actual Duration:**  
+> ควรนับจาก `payment_date` (วันจ่ายเงิน) หรือ `session แรก` ครับ?  
+> - ถ้านับจาก payment_date → อาจมี gap ก่อนเริ่มเรียนจริง  
+> - ถ้านับจาก session แรก → แม่นยำกว่า แต่ถ้ายังไม่มี session จะแสดงว่า "ยังไม่เริ่ม"
+
+> [!IMPORTANT]
+> **Feature 2 — Opportunity Cost แสดงที่ไหน:**  
+> แสดงใน `student_courses.html` (ต่อคอร์ส) หรือมีหน้า summary แยก?
+
+> [!NOTE]
+> **Feature 3 — Edit แล้ว completed_sessions:**  
+> ถ้าแก้ `total_sessions` ให้น้อยกว่า `completed_sessions` ที่มีอยู่แล้ว ควรทำอะไร? → ผมจะ validate และแสดง error ครับ

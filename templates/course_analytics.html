@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Course Analytics{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>📊 Course Analytics (ค่าเสียโอกาส)</h2>
+  <p>วิเคราะห์ระยะเวลาการเรียนและค่าเสียโอกาสจากคอร์สที่ล่าช้า (เกณฑ์มาตรฐาน: {{ sessions_per_month }} ครั้ง/เดือน)</p>
+</div>
+
+<div class="card" style="margin-bottom: 24px;">
+  <div style="padding: 16px 20px;">
+    <form method="GET" action="{{ url_for('course_analytics') }}" style="display:flex; gap:16px; align-items:center;">
+      <div>
+        <label style="font-size:0.85rem; color:var(--text-muted); display:block; margin-bottom:4px;">มุมมอง</label>
+        <select name="view" class="form-control" onchange="this.form.submit()" style="padding:4px 8px;">
+          <option value="active" {% if view == 'active' %}selected{% endif %}>🟢 คอร์สที่กำลังเรียน (Active)</option>
+          <option value="completed" {% if view == 'completed' %}selected{% endif %}>✅ คอร์สที่จบแล้ว</option>
+          <option value="all" {% if view == 'all' %}selected{% endif %}>📚 ทั้งหมด</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:0.85rem; color:var(--text-muted); display:block; margin-bottom:4px;">ปีที่รับเงิน</label>
+        <select name="year" class="form-control" onchange="this.form.submit()" style="padding:4px 8px;">
+          <option value="0">ทั้งหมดทุกปี</option>
+          {% for y in available_years %}
+          <option value="{{ y }}" {% if filter_year == y %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="dashboard-grid" style="margin-bottom: 24px;">
+  <div class="stat-card">
+    <div class="stat-icon">⏳</div>
+    <div class="stat-content">
+      <h3>ค่าเสียโอกาสรวม</h3>
+      <div class="stat-value" style="color:#f59e0b;">฿{{ "{:,.0f}".format(total_opp_cost) }}</div>
+      <p class="stat-label">รายได้ที่เสียไปจากการสอนล่าช้า</p>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📈</div>
+    <div class="stat-content">
+      <h3>ระยะเวลาจริง vs คาด</h3>
+      <div class="stat-value">{{ total_actual_months }} / {{ total_expected_months }} ด.</div>
+      <p class="stat-label">รวมทุกคอร์ส</p>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">✅</div>
+    <div class="stat-content">
+      <h3>คอร์สที่ทันกำหนด</h3>
+      <div class="stat-value">{{ on_time_count }} / {{ total_courses }}</div>
+      <p class="stat-label">คิดเป็น {{ "{:.1f}".format((on_time_count/total_courses*100) if total_courses > 0 else 0) }}%</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3>รายละเอียดรายคอร์ส</h3>
+  </div>
+  
+  {% if analytics %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>นักเรียน</th>
+          <th>คอร์ส</th>
+          <th>วันรับเงิน</th>
+          <th>สถานะ</th>
+          <th class="text-right">ราคาคอร์ส</th>
+          <th>ระยะเวลาจริง</th>
+          <th>ระยะเวลาคาด</th>
+          <th>ค่าเสียโอกาส</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in analytics %}
+        {% set c = row.course %}
+        {% set d = row.duration %}
+        <tr>
+          <td style="font-weight: 600;">{{ c.student.name }}</td>
+          <td><a href="{{ url_for('course_detail', course_id=c.id) }}" style="color: var(--accent-purple-light); text-decoration: none;">{{ c.course_name }}</a></td>
+          <td style="font-size:0.85rem; color:var(--text-muted);">
+            {{ c.payment_date.strftime('%d/%m/%Y') if c.payment_date else '—' }}
+          </td>
+          <td>
+            {% if c.is_completed %}
+              <span class="badge badge-completed">✅ จบแล้ว</span>
+            {% else %}
+              <span class="badge badge-active">🟢 Active</span>
+            {% endif %}
+          </td>
+          <td class="text-right amount">฿{{ "{:,.0f}".format(c.price_per_course) }}</td>
+          <td>
+            {% if d %}
+              <strong>{{ d.actual_months }} ด.</strong>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td style="color:var(--text-muted);">
+            {{ d.expected_months if d else '—' }} ด.
+          </td>
+          <td style="font-weight:600;">
+            {% if d and d.opp_cost > 0 %}
+              <span style="color:#f59e0b;">฿{{ "{:,.0f}".format(d.opp_cost) }}</span>
+            {% elif d %}
+              <span style="color:var(--accent-green);">—</span>
+            {% else %}
+              <span style="color:var(--text-muted);">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>ไม่พบข้อมูลคอร์สในมุมมองนี้</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

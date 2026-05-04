@@ -9,9 +9,26 @@
 
 {% include '_period_filter.html' %}
 
+<div style="display:flex; gap:8px; margin-bottom:16px; align-items:center;">
+  <span style="color:var(--text-muted); font-size:0.85rem;">แสดง:</span>
+  <a href="{{ request.path }}?period={{ period }}&report_month={{ report_month }}&report_year={{ report_year }}"
+     class="btn btn-sm {% if not active_only %}btn-primary{% else %}btn-ghost{% endif %}">
+    👥 ทั้งหมด
+  </a>
+  <a href="{{ request.path }}?period={{ period }}&report_month={{ report_month }}&report_year={{ report_year }}&active_only=1"
+     class="btn btn-sm {% if active_only %}btn-primary{% else %}btn-ghost{% endif %}">
+    🟢 Active เท่านั้น
+  </a>
+  {% if active_only %}
+  <span style="color:var(--accent-green); font-size:0.85rem; font-weight:600;">
+    — แสดง {{ students|length }} คนที่ยังคงเรียนอยู่
+  </span>
+  {% endif %}
+</div>
+
 <div class="card">
   <div class="card-header">
-    <h3>รายชื่อนักเรียนทั้งหมด ({{ students|length }})</h3>
+    <h3>รายชื่อนักเรียน{% if active_only %} Active{% endif %} ({{ students|length }})</h3>
     <button class="btn btn-primary" onclick="openModal('addStudentModal')">➕ เพิ่มนักเรียน</button>
   </div>
 
